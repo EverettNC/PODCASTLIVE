@@ -9,6 +9,7 @@ import {
   speakText,
   stopSpeaking,
 } from "@/lib/speak";
+import { jumpTo } from "@/lib/seat/live.ts";
 import { DRIVES } from "@/lib/studio/guide";
 import { RUNDOWN, SHOW, type Beat } from "@/lib/studio/show";
 import { useStudio, type DriveMode } from "@/lib/studio-store";
@@ -94,17 +95,6 @@ export function Deck() {
                 Standing
               </button>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                takeBlack();
-                useStudio.getState().setBeat("cold");
-                setOnAir(true);
-              }}
-              className="h-10 rounded-full bg-surface-2 px-4 text-sm font-medium text-fg shadow-[var(--shadow-border)]"
-            >
-              Roll Ep 01
-            </button>
             <button
               type="button"
               onClick={() => setOnAir(!live)}
@@ -268,7 +258,6 @@ function HelpStrip() {
 
 function RundownPanel() {
   const beatId = useStudio((s) => s.beatId);
-  const setBeat = useStudio((s) => s.setBeat);
   const status = useStudio((s) => s.status);
   const beat = RUNDOWN.find((b) => b.id === beatId) ?? RUNDOWN[0];
   const busy = status === "thinking" || status === "speaking" || status === "listening";
@@ -281,7 +270,7 @@ function RundownPanel() {
 
   function next() {
     const n = RUNDOWN[idx + 1];
-    if (n) setBeat(n.id);
+    if (n) jumpTo(n.id);
   }
 
   return (
@@ -291,7 +280,7 @@ function RundownPanel() {
           <button
             key={b.id}
             type="button"
-            onClick={() => setBeat(b.id)}
+            onClick={() => jumpTo(b.id)}
             className={cn(
               "h-8 shrink-0 rounded-full px-2.5 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors duration-150",
               b.id === beat.id

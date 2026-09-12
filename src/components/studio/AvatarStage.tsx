@@ -3,6 +3,7 @@ import { audioEngine } from "@/lib/avatar/audio-engine";
 import { drawCoverImage, drawTalent, fitCover, type DrawMapping } from "@/lib/avatar/draw";
 import { LEAD_RIG, PATTY_RIG, TALENT_RIG, type FaceRig } from "@/lib/avatar/landmarks";
 import { createLipTracker, type LipState } from "@/lib/avatar/lip-sync";
+import { isKilled, liveMouth } from "@/lib/seat/live.ts";
 import { playEpisode } from "@/lib/studio/director";
 import { programBus } from "@/lib/studio/program-bus";
 import { RUNDOWN, SHOW } from "@/lib/studio/show";
@@ -222,8 +223,6 @@ export function AvatarStage({
     const leadTalk = loadVideo("/avatar/live/everett-talk.mp4");
     const pattyIdle = loadVideo("/avatar/live/patty.mp4");
     const pattyTalk = loadVideo("/avatar/live/patty-talk.mp4");
-    const talentIdle = loadVideo("/avatar/live/brandon.mp4");
-    const talentTalk = loadVideo("/avatar/live/brandon-talk.mp4");
     const stageVid = loadVideo("/avatar/live/stage.mp4");
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
@@ -261,8 +260,8 @@ export function AvatarStage({
     resize();
 
     const pane = (
-      talk: HTMLVideoElement,
-      idle: HTMLVideoElement,
+      talk: HTMLVideoElement | null,
+      idle: HTMLVideoElement | null,
       img: HTMLImageElement,
       tracker: ReturnType<typeof createLipTracker>,
       rig: FaceRig,
@@ -278,8 +277,12 @@ export function AvatarStage({
       ctx.beginPath();
       ctx.rect(x, y, w, h);
       ctx.clip();
-      const src = plateSource(talk, idle, img, talking, preferStill);
-      const lip = tracker.step(null, talking, talking ? 0.4 : 0, null);
+      // Brandon's mouth is measured from the audio that is playing; killed = frozen at rest.
+      const mouth = liveMouth(rig.id);
+      const frozen = rig.id === "talent" && isKilled();
+      const src = plateSource(talk, idle, img, talking || mouth !== null, preferStill);
+      const idleLip = tracker.step(null, talking || mouth !== null, 0, null);
+      const lip: LipState = frozen ? REST : mouth ? { ...idleLip, open: mouth.open, viseme: mouth.viseme } : idleLip;
       if (src) {
         const { w: iw, h: ih } = sourceSize(src);
         if (iw > 1 && ih > 1) {
@@ -292,7 +295,7 @@ export function AvatarStage({
             src,
             map,
             still ? lip : { ...REST, blink: 0, swayX: 0, swayY: 0, swayRot: 0, breath: 0 },
-            1,
+            useStudio.getState().lipGain,
             rig,
           );
         }
@@ -336,18 +339,7 @@ export function AvatarStage({
       const paneW = Math.max(1, (cssW - gap * 2) / 3);
       pane(leadTalk, leadIdle, leadImg, leadTrack, LEAD_RIG, 0, 0, paneW, headH, leadTalks, true, true);
       pane(pattyTalk, pattyIdle, pattyImg, pattyTrack, PATTY_RIG, paneW + gap, 0, paneW, headH, pattyTalks);
-      pane(
-        talentTalk,
-        talentIdle,
-        talentImg,
-        talentTrack,
-        TALENT_RIG,
-        (paneW + gap) * 2,
-        0,
-        paneW,
-        headH,
-        talentTalks,
-      );
+      pane(null, null, talentImg, talentTrack, TALENT_RIG, (paneW + gap) * 2, 0, paneW, headH, talentTalks, false, true);
       drawDesk();
     };
 
@@ -358,7 +350,7 @@ export function AvatarStage({
       talentTalks: boolean,
     ) => {
       if (focus === "talent") {
-        pane(talentTalk, talentIdle, talentImg, talentTrack, TALENT_RIG, 0, 0, cssW, cssH, talentTalks);
+        pane(null, null, talentImg, talentTrack, TALENT_RIG, 0, 0, cssW, cssH, talentTalks, false, true);
       } else if (focus === "patty") {
         pane(pattyTalk, pattyIdle, pattyImg, pattyTrack, PATTY_RIG, 0, 0, cssW, cssH, pattyTalks);
       } else {
@@ -428,7 +420,7 @@ export function AvatarStage({
     };
 
     raf = requestAnimationFrame(loop);
-    const videos = [leadIdle, leadTalk, pattyIdle, pattyTalk, talentIdle, talentTalk, stageVid];
+    const videos = [leadIdle, leadTalk, pattyIdle, pattyTalk, stageVid];
     const kick = () => {
       lastDraw = 0;
       for (const v of videos) v.play().catch(() => {});

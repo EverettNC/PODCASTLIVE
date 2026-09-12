@@ -5,6 +5,7 @@ import { DEFAULT_INTRO, DEFAULT_SHOW } from "@/lib/studio/sets";
 import { APOLOGY_COPY, RUNDOWN, SHOW } from "@/lib/studio/show";
 import { DEFAULT_VOICE } from "@/lib/xai/voices";
 import type { ChatTurn } from "@/lib/xai/talk";
+import type { Phase } from "@/lib/seat/interlock.ts";
 
 export type RuntimeStatus = "idle" | "listening" | "thinking" | "speaking";
 export type DriveMode = "book" | "talent" | "copy" | "mic";
@@ -132,6 +133,12 @@ type StudioState = {
   millEngine: string | null;
   millPath: Record<MillSeat, string>;
   expressBeat: Record<string, string>;
+  phase: Phase;
+  killed: boolean;
+  setPhase: (p: Phase) => void;
+  setKilled: (v: boolean) => void;
+  startClock: () => void;
+  programBeat: (id: string) => void;
   setMillUrl: (v: string) => void;
   setMillStatus: (ok: boolean | null, engine: string | null) => void;
   setMillPath: (seat: MillSeat, path: string) => void;
@@ -173,6 +180,13 @@ type StudioState = {
 
 const DEFAULT_COPY = APOLOGY_COPY;
 let nextId = 1;
+
+/** During the disclaimer nothing cuts away from it. */
+function refuseCut(get: () => StudioState, set: (p: Partial<StudioState>) => void) {
+  if (get().phase !== "coldopen") return false;
+  set({ error: "Refused: the disclaimer plays to completion before any cut." });
+  return true;
+}
 
 function persistSlice(s: StudioState): Persist {
   return {
@@ -229,6 +243,11 @@ export const useStudio = create<StudioState>((set, get) => ({
   millEngine: null,
   millPath: emptyPaths(),
   expressBeat: {},
+  phase: "standby",
+  killed: false,
+  setPhase: (phase) => set({ phase }),
+  setKilled: (killed) => set({ killed }),
+  startClock: () => set({ rolledAt: Date.now() }),
   setMillUrl: (millUrl) => {
     set({ millUrl, millOk: null, millEngine: null });
     writePersist(persistSlice(get()));
@@ -283,16 +302,19 @@ export const useStudio = create<StudioState>((set, get) => ({
   plugIntro: (introUrl) => set({ introUrl }),
   plugShow: (showUrl) => set({ showUrl }),
   takeIntro: () => {
+    if (refuseCut(get, set)) return;
     set({ shot: "cover", bay: "floor" });
     writePersist(persistSlice(get()));
     get().pushLog("system", "Title card on program.");
   },
   takeShow: () => {
+    if (refuseCut(get, set)) return;
     set({ shot: "two", camMove: "scan", bay: "floor" });
     writePersist(persistSlice(get()));
     get().pushLog("system", "Cam A. Three at the desk.");
   },
   takeBlack: () => {
+    if (refuseCut(get, set)) return;
     set({ shot: "black", bay: "floor" });
     writePersist(persistSlice(get()));
     get().pushLog("system", "Cold open. Over black.");
@@ -311,12 +333,12 @@ export const useStudio = create<StudioState>((set, get) => ({
     set({
       onAir: true,
       rolling: true,
-      rolledAt: Date.now(),
+      rolledAt: null, // the clock starts when the interlock says the disclaimer has played
       rollGen: next,
       drive: "book",
       bay: "floor",
       shot: "black",
-      beatId: "cold-e1",
+      beatId: "cold",
       helpOpen: false,
       caption: null,
       error: null,
@@ -364,7 +386,8 @@ export const useStudio = create<StudioState>((set, get) => ({
     }),
   setCue: (cue) => set({ cue }),
   setCopy: (copy) => set({ copy }),
-  setBeat: (beatId) => {
+  /** The cue on program, as decided by the interlock. */
+  programBeat: (beatId) => {
     const beat = RUNDOWN.find((b) => b.id === beatId);
     if (!beat) return;
     const patch: Partial<StudioState> = { beatId };
@@ -375,15 +398,14 @@ export const useStudio = create<StudioState>((set, get) => ({
     if (beat.speaker === "everett" || beat.speaker === "patty") patch.copy = beat.text;
     set(patch);
     writePersist(persistSlice(get()));
-    if (beat.id === "title" && typeof window !== "undefined") {
-      window.setTimeout(() => {
-        const s = get();
-        if (s.beatId === "title" && s.rollGen === get().rollGen) {
-          s.takeShow();
-          s.setBeat("standing");
-        }
-      }, 4800);
+  },
+  /** Rehearsal only. On air, cues move through the interlock (seat/live.ts jumpTo). */
+  setBeat: (beatId) => {
+    if (get().phase !== "standby") {
+      set({ error: "Refused: while the show is on, cues move through the interlock." });
+      return;
     }
+    get().programBeat(beatId);
   },
   pushLog: (role, text) =>
     set((s) => ({

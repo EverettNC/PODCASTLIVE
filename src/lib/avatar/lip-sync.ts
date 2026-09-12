@@ -1,6 +1,7 @@
+import type { VisemeName } from "../seat/visemes.ts";
 import type { MouthPose } from "./mouth";
 
-export type Viseme = "rest" | "closed" | "aa" | "oh" | "ee";
+export type Viseme = "rest" | "closed" | "aa" | "oh" | "ee" | VisemeName;
 
 export type LipState = {
   open: number;
