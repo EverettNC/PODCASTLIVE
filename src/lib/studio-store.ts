@@ -19,13 +19,6 @@ const LS_KEY = "fnta-ep01";
 const DEFAULT_EPISODE = `${SHOW.episodeNum} — ${SHOW.episodeName}`;
 
 let hydrated = false;
-let rollTimers: number[] = [];
-
-function clearRollTimers() {
-  if (typeof window === "undefined") return;
-  for (const id of rollTimers) window.clearTimeout(id);
-  rollTimers = [];
-}
 
 function migrateShot(raw?: string): Shot {
   if (raw === "host") return "talent";
@@ -135,9 +128,6 @@ type StudioState = {
   expressBeat: Record<string, string>;
   phase: Phase;
   killed: boolean;
-  setPhase: (p: Phase) => void;
-  setKilled: (v: boolean) => void;
-  startClock: () => void;
   programBeat: (id: string) => void;
   setMillUrl: (v: string) => void;
   setMillStatus: (ok: boolean | null, engine: string | null) => void;
@@ -182,11 +172,7 @@ const DEFAULT_COPY = APOLOGY_COPY;
 let nextId = 1;
 
 /** During the disclaimer nothing cuts away from it. */
-function refuseCut(get: () => StudioState, set: (p: Partial<StudioState>) => void) {
-  if (get().phase !== "coldopen") return false;
-  set({ error: "Refused: the disclaimer plays to completion before any cut." });
-  return true;
-}
+const CUT_REFUSED = "Refused: the disclaimer plays to completion before any cut.";
 
 function persistSlice(s: StudioState): Persist {
   return {
@@ -245,9 +231,6 @@ export const useStudio = create<StudioState>((set, get) => ({
   expressBeat: {},
   phase: "standby",
   killed: false,
-  setPhase: (phase) => set({ phase }),
-  setKilled: (killed) => set({ killed }),
-  startClock: () => set({ rolledAt: Date.now() }),
   setMillUrl: (millUrl) => {
     set({ millUrl, millOk: null, millEngine: null });
     writePersist(persistSlice(get()));
@@ -286,6 +269,7 @@ export const useStudio = create<StudioState>((set, get) => ({
   setDrive: (drive) => set({ drive }),
   setBay: (bay) => set({ bay }),
   setShot: (shot, move = "cut") => {
+    if (get().phase === "coldopen") return set({ error: CUT_REFUSED });
     set({ shot, camMove: move });
     writePersist(persistSlice(get()));
   },
@@ -302,26 +286,25 @@ export const useStudio = create<StudioState>((set, get) => ({
   plugIntro: (introUrl) => set({ introUrl }),
   plugShow: (showUrl) => set({ showUrl }),
   takeIntro: () => {
-    if (refuseCut(get, set)) return;
+    if (get().phase === "coldopen") return set({ error: CUT_REFUSED });
     set({ shot: "cover", bay: "floor" });
     writePersist(persistSlice(get()));
     get().pushLog("system", "Title card on program.");
   },
   takeShow: () => {
-    if (refuseCut(get, set)) return;
+    if (get().phase === "coldopen") return set({ error: CUT_REFUSED });
     set({ shot: "two", camMove: "scan", bay: "floor" });
     writePersist(persistSlice(get()));
     get().pushLog("system", "Cam A. Three at the desk.");
   },
   takeBlack: () => {
-    if (refuseCut(get, set)) return;
+    if (get().phase === "coldopen") return set({ error: CUT_REFUSED });
     set({ shot: "black", bay: "floor" });
     writePersist(persistSlice(get()));
     get().pushLog("system", "Cold open. Over black.");
   },
   rollEpisode: (gen) => {
     const next = gen ?? get().rollGen + 1;
-    clearRollTimers();
     const prev = get().replayUrl;
     if (prev) {
       try {
@@ -401,10 +384,7 @@ export const useStudio = create<StudioState>((set, get) => ({
   },
   /** Rehearsal only. On air, cues move through the interlock (seat/live.ts jumpTo). */
   setBeat: (beatId) => {
-    if (get().phase !== "standby") {
-      set({ error: "Refused: while the show is on, cues move through the interlock." });
-      return;
-    }
+    if (get().phase !== "standby") return set({ error: "Refused: while the show is on, cues move through the interlock." });
     get().programBeat(beatId);
   },
   pushLog: (role, text) =>

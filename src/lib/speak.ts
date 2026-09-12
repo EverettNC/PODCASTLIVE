@@ -1,9 +1,9 @@
 import { audioEngine } from "@/lib/avatar/audio-engine";
 import type { VisemeTrack } from "@/lib/seat/envelope.ts";
-import { playTake, show, type Seat } from "@/lib/seat/live.ts";
-import { SEAT_VOICE, voiceFor } from "@/lib/studio/book";
+import { CUES, SEAT, type Seat } from "@/lib/seat/cuebook.ts";
+import { playTake, show } from "@/lib/seat/live.ts";
+import { SEAT_VOICE } from "@/lib/studio/book";
 import { beingFor, type MillSeat } from "@/lib/studio/mill";
-import { RUNDOWN } from "@/lib/studio/show";
 import { useStudio } from "@/lib/studio-store";
 import { settle } from "@/lib/studio/hard";
 import { splitTakes } from "@/lib/text";
@@ -11,18 +11,12 @@ import { askHost } from "@/lib/xai/talk";
 
 export { splitTakes };
 
-export type Take = { audio: ArrayBuffer; lipsync?: VisemeTrack };
+type Take = { audio: ArrayBuffer; lipsync?: VisemeTrack };
 
-function seatOf(speaker: string): MillSeat {
-  if (speaker === "patty") return "patty";
-  if (speaker === "talent") return "talent";
-  return "everett";
-}
-
-const rigSeat = (s: MillSeat): Seat => (s === "everett" ? "lead" : s);
+const millSeat = (s: Seat): MillSeat => (s === "lead" ? "everett" : s);
 
 /** One take from the mill through /api/tts: audio, plus phoneme timing when the mill sent it. */
-export async function synthesize(text: string, voice: string, being: string, reference: string): Promise<Take> {
+async function synthesize(text: string, voice: string, being: string, reference: string): Promise<Take> {
   const millUrl = useStudio.getState().millUrl || "";
   const res = await fetch("/api/tts", {
     method: "POST",
@@ -31,32 +25,42 @@ export async function synthesize(text: string, voice: string, being: string, ref
     signal: AbortSignal.timeout(40000),
   });
   if (!res.ok) throw new Error(`mill ${res.status}`);
-  if ((res.headers.get("content-type") || "").includes("application/json")) {
-    const data = (await res.json()) as { wav: string; lipsync?: VisemeTrack };
-    const bin = atob(data.wav);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return { audio: bytes.buffer, lipsync: data.lipsync };
-  }
-  return { audio: await res.arrayBuffer() };
+  const data = (await res.json()) as { wav: string; lipsync?: VisemeTrack };
+  const bin = atob(data.wav);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return { audio: bytes.buffer, lipsync: data.lipsync };
 }
 
-export async function speakText(text: string, voiceId?: string) {
+/**
+ * Speak on the seat of the cue on program (Brandon's, when a voice is named).
+ * Brandon's seat goes through the interlock first: the line is logged verbatim
+ * or refused, whichever panel it came from. Resolves true once a take has played.
+ */
+export async function speakText(text: string, voiceId?: string): Promise<boolean> {
   const store = useStudio.getState();
   const takes = splitTakes(text);
-  if (!takes.length) return;
+  if (!takes.length) return false;
   store.clearError();
+  const cue = CUES.find((c) => c.id === store.beatId);
+  const seat: Seat = voiceId ? "talent" : ((cue && SEAT[cue.owner]) ?? "talent");
+  if (seat === "talent") {
+    try {
+      show.spoke(text, true);
+    } catch (err) {
+      store.setStatus("idle");
+      store.setError(err instanceof Error ? err.message : String(err));
+      return false;
+    }
+  }
   store.setStatus("speaking");
   store.setOnAir(true);
   audioEngine.setVolume(show.killed ? 0 : store.volume);
   await audioEngine.ensure();
 
-  const beat = RUNDOWN.find((b) => b.id === store.beatId);
-  const speaker = beat?.speaker ?? "talent";
-  const voice = voiceId ?? (beat ? voiceFor(beat.speaker) : store.voice);
-  const seat = seatOf(voiceId ? "talent" : speaker);
-  const being = beingFor(seat);
-  const reference = store.millPath[seat];
+  const voice = voiceId ?? SEAT_VOICE[millSeat(seat)];
+  const being = beingFor(millSeat(seat));
+  const reference = store.millPath[millSeat(seat)];
   let heard = false;
 
   try {
@@ -68,7 +72,7 @@ export async function speakText(text: string, voiceId?: string) {
       const ctx = audioEngine.ctx;
       if (!ctx) throw new Error("audio context unavailable");
       const buf = await ctx.decodeAudioData(got.audio.slice(0));
-      await playTake(rigSeat(seat), buf, got.lipsync);
+      await playTake(seat, buf, got.lipsync);
       heard = true;
     }
   } catch (err) {
@@ -82,6 +86,7 @@ export async function speakText(text: string, voiceId?: string) {
     if (current.status === "speaking") current.setStatus("idle");
     if (heard) current.setCaption(null);
   }
+  return heard;
 }
 
 /** The operator addresses Brandon. He answers only if the interlock allows it, and only with a real reply. */
@@ -114,15 +119,8 @@ export async function runHostCue(cue: string) {
     store.setError(`The seat's model is ${result.error}. Brandon says nothing.`);
     return;
   }
-  try {
-    show.spoke(result.text, true);
-  } catch (err) {
-    store.setStatus("idle");
-    store.setError(err instanceof Error ? err.message : String(err));
-    return;
-  }
-  store.pushHistory({ role: "assistant", content: result.text });
-  await speakText(result.text, SEAT_VOICE.talent);
+  // speakText puts the line through the interlock; only a line he actually said joins his history.
+  if (await speakText(result.text, SEAT_VOICE.talent)) store.pushHistory({ role: "assistant", content: result.text });
 }
 
 export function stopSpeaking() {

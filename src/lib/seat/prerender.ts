@@ -2,17 +2,16 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { GlobalFonts, createCanvas, loadImage, type Image } from "@napi-rs/canvas";
-import { drawBlink, fitCover } from "../avatar/draw.ts";
+import { GlobalFonts, createCanvas, loadImage, type Canvas, type Image } from "@napi-rs/canvas";
+import { drawTalent, fitCover } from "../avatar/draw.ts";
 import { TALENT_RIG } from "../avatar/landmarks.ts";
+import { sway } from "../avatar/lip-sync.ts";
 import { SHOW } from "../studio/show.ts";
 import { decodePcm, ffmpegPath, wavBytes } from "./audio-node.ts";
-import { DISCLAIMER_CUES, cueById, type Cue, type Owner } from "./cuebook.ts";
+import { DISCLAIMER_CUES, HOLD_MS, cueById, type Cue, type Owner } from "./cuebook.ts";
 import { frameAt, mergeVisemeTrack, mouthFrames, type MouthFrame, type VisemeTrack } from "./envelope.ts";
-import { drawMouth } from "./mouth-draw.ts";
 
-const HOLD_SEC: Partial<Record<Owner, number>> = { BLACK: 1.5, TITLE: 4.5 }; // script: "Hold 4-5 seconds"
-const BRANDON_PLATE = "public/avatar/host.jpg";
+const CAPTIONS = "burned-in, sentence timing proportional to text length within each cue";
 
 export type RenderOpts = {
   cueIds: string[];
@@ -32,7 +31,7 @@ export type RenderResult = {
   height: number;
   durationSec: number;
   disclaimerEndSec: number;
-  captions: "burned-in, sentence timing proportional to text length within each cue";
+  captions: typeof CAPTIONS;
   cues: { id: string; owner: Owner; startSec: number; endSec: number }[];
 };
 
@@ -53,9 +52,9 @@ export async function prerender(o: RenderOpts): Promise<RenderResult> {
   const cues = [...DISCLAIMER_CUES, ...wanted.filter((c) => !DISCLAIMER_CUES.includes(c))];
 
   ensureFont();
-  const backdrop = await loadImage(join(root, "public/backdrop/stage.png"));
-  const titleCard = await loadImage(join(root, "public/backdrop/intro.png"));
-  const brandon = await loadImage(join(root, BRANDON_PLATE));
+  const backdrop = await plate(join(root, "public/backdrop/stage.png"), W, H);
+  const titleCard = await plate(join(root, "public/backdrop/intro.png"), W, H);
+  const brandon = await loadImage(join(root, "public", TALENT_RIG.src));
 
   const segs: Segment[] = [];
   const pcm: Float32Array[] = [];
@@ -63,7 +62,7 @@ export async function prerender(o: RenderOpts): Promise<RenderResult> {
   for (const [i, c] of cues.entries()) {
     let samples: Float32Array;
     if (c.owner === "BLACK" || c.owner === "TITLE") {
-      samples = new Float32Array(Math.round((HOLD_SEC[c.owner] ?? 1) * sr));
+      samples = new Float32Array(Math.round((HOLD_MS[c.owner] / 1000) * sr));
     } else {
       const file = join(root, "public/audio/book", `${c.id}.mp3`);
       if (!existsSync(file)) throw new Error(`stage tts: no audio for cue ${c.n} ${c.id}; nothing moves without audio`);
@@ -116,7 +115,7 @@ export async function prerender(o: RenderOpts): Promise<RenderResult> {
     height: H,
     durationSec: t,
     disclaimerEndSec: segs[DISCLAIMER_CUES.length - 1].end,
-    captions: "burned-in, sentence timing proportional to text length within each cue",
+    captions: CAPTIONS,
     cues: segs.map((s) => ({ id: s.cue.id, owner: s.cue.owner, startSec: s.start, endSec: s.end })),
   };
   writeFileSync(`${o.outPath}.cues.json`, JSON.stringify(result, null, 2));
@@ -128,6 +127,15 @@ function ensureFont() {
   if (GlobalFonts.families.length === 0) {
     throw new Error("stage captions: no font is installed; burned-in captions are required, refusing to render");
   }
+}
+
+/** A full-frame image resampled to output size once; every frame after blits it 1:1. */
+async function plate(file: string, W: number, H: number): Promise<Canvas> {
+  const img = await loadImage(file);
+  const c = createCanvas(W, H);
+  const b = fitCover(W, H, img.width, img.height);
+  c.getContext("2d").drawImage(img, b.dx, b.dy, b.dw, b.dh);
+  return c;
 }
 
 function concat(parts: Float32Array[]): Float32Array {
@@ -144,8 +152,8 @@ function drawFrame(
   ctx: CanvasRenderingContext2D,
   W: number,
   H: number,
-  backdrop: Image,
-  titleCard: Image,
+  backdrop: Canvas,
+  titleCard: Canvas,
   brandon: Image,
   seg: Segment,
   tRel: number,
@@ -153,7 +161,7 @@ function drawFrame(
 ) {
   const { cue } = seg;
   if (cue.owner === "TITLE") {
-    cover(ctx, titleCard, W, H);
+    ctx.drawImage(titleCard as unknown as CanvasImageSource, 0, 0);
     return;
   }
   if (cue.owner !== "BRANDON") {
@@ -162,26 +170,11 @@ function drawFrame(
     return;
   }
 
-  cover(ctx, backdrop, W, H);
-  const box = fitCover(W, H, brandon.width, brandon.height);
+  ctx.drawImage(backdrop as unknown as CanvasImageSource, 0, 0);
   const fr = frameAt(seg.frames, tRel, fps);
-  const idle = fr.open > 0.05 ? 0.45 : 1;
-  const swayX = Math.sin(tRel * 0.72) * 4.2 * idle;
-  const swayY = Math.sin(tRel * 0.91 + 0.4) * 2.6 * idle;
-  const swayRot = Math.sin(tRel * 0.47) * 0.012 * idle;
-  const breath = 1 + Math.sin(tRel * 1.15) * 0.008;
-
-  ctx.save();
-  ctx.translate(box.dx + box.dw / 2 + swayX, box.dy + box.dh / 2 + swayY);
-  ctx.rotate(swayRot);
-  ctx.scale(breath, breath);
-  ctx.translate(-(box.dx + box.dw / 2), -(box.dy + box.dh / 2));
-  ctx.drawImage(brandon as unknown as CanvasImageSource, box.dx, box.dy, box.dw, box.dh);
-  drawMouth(ctx, box, TALENT_RIG, fr.viseme, fr.open);
-  const blink = blinkAt(tRel, seg.seed);
-  if (blink > 0.04) drawBlink(ctx, box.dx, box.dy, box.dw, box.dh, blink, TALENT_RIG);
-  ctx.restore();
-
+  const lip = { ...fr, blink: blinkAt(tRel, seg.seed), ...sway(tRel, fr.open > 0.05) };
+  // The same call the live stage makes, so the render and the floor draw the one rig.
+  drawTalent(ctx, brandon as unknown as CanvasImageSource, fitCover(W, H, brandon.width, brandon.height), lip, 1, TALENT_RIG);
   drawCaption(ctx, W, H, captionAt(cue.text, tRel, seg.end - seg.start));
 }
 
@@ -197,11 +190,6 @@ function drawSlate(ctx: CanvasRenderingContext2D, W: number, H: number) {
   ctx.fillStyle = "#9a9a94";
   ctx.font = `500 ${Math.round(H * 0.018)}px monospace`;
   ctx.fillText(SHOW.episodeNum.toUpperCase(), W / 2, H * 0.5);
-}
-
-function cover(ctx: CanvasRenderingContext2D, img: Image, W: number, H: number) {
-  const b = fitCover(W, H, img.width, img.height);
-  ctx.drawImage(img as unknown as CanvasImageSource, b.dx, b.dy, b.dw, b.dh);
 }
 
 /** Irregular blinks on a fixed schedule per segment, so a render is repeatable. */

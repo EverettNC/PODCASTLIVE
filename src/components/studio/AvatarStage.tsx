@@ -1,12 +1,13 @@
 import { useEffect, useRef } from "react";
 import { audioEngine } from "@/lib/avatar/audio-engine";
 import { drawCoverImage, drawTalent, fitCover, type DrawMapping } from "@/lib/avatar/draw";
-import { LEAD_RIG, PATTY_RIG, TALENT_RIG, type FaceRig } from "@/lib/avatar/landmarks";
-import { createLipTracker, type LipState } from "@/lib/avatar/lip-sync";
+import { LEAD_RIG, PATTY_RIG, TALENT_RIG } from "@/lib/avatar/landmarks";
+import { createIdleMotion, type LipState } from "@/lib/avatar/lip-sync";
+import { CUES, SEAT, type Seat } from "@/lib/seat/cuebook.ts";
 import { isKilled, liveMouth } from "@/lib/seat/live.ts";
 import { playEpisode } from "@/lib/studio/director";
 import { programBus } from "@/lib/studio/program-bus";
-import { RUNDOWN, SHOW } from "@/lib/studio/show";
+import { SHOW } from "@/lib/studio/show";
 import {
   introBackdropSrc,
   showBackdropSrc,
@@ -15,16 +16,7 @@ import {
 } from "@/lib/studio-store";
 import { cn } from "@/lib/utils";
 
-const REST: LipState = {
-  open: 0,
-  viseme: "rest",
-  blink: 0,
-  swayX: 0,
-  swayY: 0,
-  swayRot: 0,
-  breath: 0,
-  rms: 0,
-};
+const REST: LipState = { open: 0, viseme: "rest", blink: 0, swayX: 0, swayY: 0, swayRot: 0, breath: 0 };
 
 function loadVideo(src: string) {
   const v = document.createElement("video");
@@ -80,13 +72,9 @@ function sourceSize(src: CanvasImageSource) {
   return { w: 0, h: 0 };
 }
 
-function seatFor(beatId: string): "lead" | "patty" | "talent" | null {
-  const beat = RUNDOWN.find((b) => b.id === beatId);
-  if (!beat) return null;
-  if (beat.speaker === "everett") return "lead";
-  if (beat.speaker === "patty") return "patty";
-  if (beat.speaker === "talent") return "talent";
-  return null;
+function seatFor(beatId: string): Seat | null {
+  const cue = CUES.find((c) => c.id === beatId);
+  return (cue && SEAT[cue.owner]) ?? null;
 }
 
 export function ProgramMonitor({
@@ -231,9 +219,11 @@ export function AvatarStage({
     if (!ctx) return;
     programBus.attach(canvas);
 
-    const talentTrack = createLipTracker();
-    const leadTrack = createLipTracker();
-    const pattyTrack = createLipTracker();
+    const seats = {
+      lead: { talk: leadTalk, idle: leadIdle, img: leadImg, motion: createIdleMotion(), rig: LEAD_RIG, lockTop: true, preferStill: true },
+      patty: { talk: pattyTalk, idle: pattyIdle, img: pattyImg, motion: createIdleMotion(), rig: PATTY_RIG, lockTop: false, preferStill: false },
+      talent: { talk: null, idle: null, img: talentImg, motion: createIdleMotion(), rig: TALENT_RIG, lockTop: false, preferStill: true },
+    };
     let raf = 0;
     let running = true;
     let cssW = 1;
@@ -259,45 +249,25 @@ export function AvatarStage({
     ro.observe(wrap);
     resize();
 
-    const pane = (
-      talk: HTMLVideoElement | null,
-      idle: HTMLVideoElement | null,
-      img: HTMLImageElement,
-      tracker: ReturnType<typeof createLipTracker>,
-      rig: FaceRig,
-      x: number,
-      y: number,
-      w: number,
-      h: number,
-      talking: boolean,
-      lockTop = false,
-      preferStill = false,
-    ) => {
+    const pane = (seat: (typeof seats)[Seat], x: number, y: number, w: number, h: number, talking: boolean) => {
       ctx.save();
       ctx.beginPath();
       ctx.rect(x, y, w, h);
       ctx.clip();
       // Brandon's mouth is measured from the audio that is playing; killed = frozen at rest.
-      const mouth = liveMouth(rig.id);
-      const frozen = rig.id === "talent" && isKilled();
-      const src = plateSource(talk, idle, img, talking || mouth !== null, preferStill);
-      const idleLip = tracker.step(null, talking || mouth !== null, 0, null);
-      const lip: LipState = frozen ? REST : mouth ? { ...idleLip, open: mouth.open, viseme: mouth.viseme } : idleLip;
+      const mouth = liveMouth(seat.rig.id);
+      const speaking = talking || mouth !== null;
+      const src = plateSource(seat.talk, seat.idle, seat.img, speaking, seat.preferStill);
+      const idle = seat.motion(speaking);
+      const lip: LipState = seat.rig.id === "talent" && isKilled() ? REST : { ...REST, ...idle, ...mouth };
       if (src) {
         const { w: iw, h: ih } = sourceSize(src);
         if (iw > 1 && ih > 1) {
-          const map: DrawMapping = fitCover(w, h, iw, ih, lockTop, 1);
+          const map: DrawMapping = fitCover(w, h, iw, ih, seat.lockTop, 1);
           map.dx += x;
           map.dy += y;
           const still = !(src instanceof HTMLVideoElement);
-          drawTalent(
-            ctx,
-            src,
-            map,
-            still ? lip : { ...REST, blink: 0, swayX: 0, swayY: 0, swayRot: 0, breath: 0 },
-            useStudio.getState().lipGain,
-            rig,
-          );
+          drawTalent(ctx, src, map, still ? lip : REST, useStudio.getState().lipGain, seat.rig);
         }
       }
       ctx.restore();
@@ -330,54 +300,30 @@ export function AvatarStage({
       ctx.fillText("EPISODE ONE", cssW / 2, cssH * 0.56);
     };
 
-    const drawWide = (leadTalks: boolean, pattyTalks: boolean, talentTalks: boolean) => {
+    const drawWide = (talks: Record<Seat, boolean>) => {
       const stage = plateSource(null, stageVid, setImg, false);
       if (stage) drawCoverImage(ctx, stage, 0, 0, cssW, cssH);
-      const deskY = Math.round(cssH * 0.72);
-      const headH = Math.max(1, deskY);
+      const headH = Math.max(1, Math.round(cssH * 0.72));
       const gap = 4;
       const paneW = Math.max(1, (cssW - gap * 2) / 3);
-      pane(leadTalk, leadIdle, leadImg, leadTrack, LEAD_RIG, 0, 0, paneW, headH, leadTalks, true, true);
-      pane(pattyTalk, pattyIdle, pattyImg, pattyTrack, PATTY_RIG, paneW + gap, 0, paneW, headH, pattyTalks);
-      pane(null, null, talentImg, talentTrack, TALENT_RIG, (paneW + gap) * 2, 0, paneW, headH, talentTalks, false, true);
+      pane(seats.lead, 0, 0, paneW, headH, talks.lead);
+      pane(seats.patty, paneW + gap, 0, paneW, headH, talks.patty);
+      pane(seats.talent, (paneW + gap) * 2, 0, paneW, headH, talks.talent);
       drawDesk();
     };
 
-    const drawIso = (
-      focus: "lead" | "patty" | "talent",
-      leadTalks: boolean,
-      pattyTalks: boolean,
-      talentTalks: boolean,
-    ) => {
-      if (focus === "talent") {
-        pane(null, null, talentImg, talentTrack, TALENT_RIG, 0, 0, cssW, cssH, talentTalks, false, true);
-      } else if (focus === "patty") {
-        pane(pattyTalk, pattyIdle, pattyImg, pattyTrack, PATTY_RIG, 0, 0, cssW, cssH, pattyTalks);
-      } else {
-        pane(leadTalk, leadIdle, leadImg, leadTrack, LEAD_RIG, 0, 0, cssW, cssH, leadTalks, true, true);
-      }
-    };
-
     const drawStanding = (state: ReturnType<typeof useStudio.getState>) => {
-      const talkingSeat =
-        state.status === "speaking" || state.lineDur > 0
-          ? seatFor(state.beatId)
-          : null;
-      const talentTalks = talkingSeat === "talent";
-      const leadTalks =
-        talkingSeat === "lead" ||
-        (state.drive === "mic" && Boolean(audioEngine.micStream));
-      const pattyTalks = talkingSeat === "patty";
+      const talkingSeat = state.status === "speaking" || state.lineDur > 0 ? seatFor(state.beatId) : null;
+      const talks: Record<Seat, boolean> = {
+        lead: talkingSeat === "lead" || (state.drive === "mic" && Boolean(audioEngine.micStream)),
+        patty: talkingSeat === "patty",
+        talent: talkingSeat === "talent",
+      };
       const shotNow: Shot = state.shot;
-
-      if (shotNow === "talent") {
-        drawIso("talent", leadTalks, pattyTalks, talentTalks);
-      } else if (shotNow === "patty") {
-        drawIso("patty", leadTalks, pattyTalks, talentTalks);
-      } else if (shotNow === "lead") {
-        drawIso("lead", leadTalks, pattyTalks, talentTalks);
+      if (shotNow === "talent" || shotNow === "patty" || shotNow === "lead") {
+        pane(seats[shotNow], 0, 0, cssW, cssH, talks[shotNow]);
       } else {
-        drawWide(leadTalks, pattyTalks, talentTalks);
+        drawWide(talks);
       }
     };
 
@@ -448,7 +394,7 @@ export function AvatarStage({
     };
   }, [talentSrc, leadSrc, pattySrc, backdropSrc, introSrc, talentUrl, leadUrl, pattyUrl, showUrl]);
 
-  const plates: Array<"lead" | "patty" | "talent"> =
+  const plates: Seat[] =
     shot === "black" || shot === "cover"
       ? []
       : shot === "lead"

@@ -17,6 +17,8 @@ const RELEASE = 0.35;
  * so a bright or dull recording does not skew the shapes.
  * Honest scope: amplitude and spectral class, not phonemes. When the Voice
  * SDK's phoneme timing is available, mergeVisemeTrack() overrides the shape.
+ * Whole-take: the medians need the full buffer, so this runs once per take
+ * before it plays. It is not a frame-by-frame analyser for a live microphone.
  */
 export function mouthFrames(samples: Float32Array, sampleRate: number, fps = 30): MouthFrame[] {
   const hop = Math.round(sampleRate / fps);

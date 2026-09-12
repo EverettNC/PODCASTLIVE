@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { ffmpegPath } from "./audio-node.ts";
@@ -22,15 +22,10 @@ export function modelReport(
     join(home, ".christman_ai", "voice_profiles", "brandon", "reference.wav"),
     join(home, ".christman_ai", "voice_profiles", "brandon.wav"),
   ];
-  const hasWavs = (dir: string) => existsSync(dir) && readdirSync(dir).some((f) => f.endsWith(".wav"));
-  const brandonHit = brandon.find((p) => (p.endsWith("brandon") ? hasWavs(p) : existsSync(p)));
-  const runs = (cmd: string, args: string[]) => {
-    try {
-      return spawnSync(cmd, args).status === 0;
-    } catch {
-      return false;
-    }
-  };
+  /** A reference file, or a directory holding at least one wav. */
+  const voiceAt = (p: string) => existsSync(p) && (statSync(p).isFile() || readdirSync(p).some((f) => f.endsWith(".wav")));
+  const brandonHit = brandon.find(voiceAt);
+  const runs = (cmd: string, args: string[]) => spawnSync(cmd, args).status === 0;
   let ffmpeg = "";
   try {
     ffmpeg = ffmpegPath();

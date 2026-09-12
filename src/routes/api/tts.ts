@@ -90,12 +90,10 @@ export const Route = createFileRoute("/api/tts")({
         if (take.audio.byteLength <= 64) {
           return Response.json({ error: "mill-empty", detail: "the mill returned no audio" }, { status: 503 });
         }
-        if (take.lipsync) {
-          return Response.json({ wav: Buffer.from(take.audio).toString("base64"), lipsync: take.lipsync });
-        }
-        return new Response(take.audio, {
-          headers: { "Content-Type": "audio/wav", "Cache-Control": "no-store", "X-Mill": "christman" },
-        });
+        return Response.json(
+          { wav: Buffer.from(take.audio).toString("base64"), lipsync: take.lipsync },
+          { headers: { "Cache-Control": "no-store", "X-Mill": "christman" } },
+        );
       },
     },
   },

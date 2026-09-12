@@ -3,7 +3,14 @@ import { SHAPES, visemeFor } from "./visemes.ts";
 
 export type Box = { dx: number; dy: number; dw: number; dh: number };
 
-const rgb = (c: Rgb, a = 1) => `rgba(${Math.round(c.r)},${Math.round(c.g)},${Math.round(c.b)},${a})`;
+export const rgb = (c: Rgb, a = 1) => `rgba(${Math.round(c.r)},${Math.round(c.g)},${Math.round(c.b)},${a})`;
+
+/**
+ * Skin colour per plate size, sampled once. A pixel readback every frame makes
+ * a browser drop the whole stage canvas to software rasterisation. Sway moves
+ * the probe under a pixel, so the cached colour is within 1/255 of a fresh one.
+ */
+const skinCache = new Map<string, Rgb | null>();
 
 /**
  * The swappable mouth region. A skin patch in the plate's own colour covers
@@ -26,7 +33,10 @@ export function drawMouth(
   const gap = ry0 * (0.15 + Math.min(1, Math.max(0, open)) * s.jaw * 2.2);
 
   // Cover only the plate's painted lips, in the plate's own colour, feathered out.
-  const skin = sampleSkin(ctx, cx, cy, rx0) ?? rig.skin;
+  const key = `${rig.id}:${Math.round(box.dw)}x${Math.round(box.dh)}`;
+  let skin = skinCache.get(key);
+  if (skin === undefined) skinCache.set(key, (skin = sampleSkin(ctx, cx, cy, rx0)));
+  skin ??= rig.skin;
   const patch = ctx.createRadialGradient(cx, cy, rx0 * 0.7, cx, cy, rx0 * 1.35);
   patch.addColorStop(0, rgb(skin, 0.9));
   patch.addColorStop(1, rgb(skin, 0));

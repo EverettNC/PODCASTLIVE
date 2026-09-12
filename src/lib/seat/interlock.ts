@@ -1,4 +1,4 @@
-import { CUES, type Cue } from "./cuebook.ts";
+import { CUES, disclaimerOf, type Cue } from "./cuebook.ts";
 
 export type Phase = "standby" | "coldopen" | "rolling" | "done";
 export type ShowEventKind =
@@ -8,6 +8,7 @@ export type ShowEventKind =
   | "cue_completed"
   | "clock_started"
   | "line_spoken"
+  | "line_dropped"
   | "refused"
   | "kill"
   | "release"
@@ -44,11 +45,7 @@ export function createShow(
   cues: Cue[] = CUES,
   now: () => Date = () => new Date(),
 ) {
-  const disclaimer = cues.slice(
-    0,
-    cues.findIndex((c) => c.owner === "TITLE"),
-  );
-  const lastDisclaimer = disclaimer[disclaimer.length - 1];
+  const lastDisclaimer = disclaimerOf(cues).at(-1)!;
   let phase: Phase = "standby";
   let index = -1;
   let clockStartedAt: Date | null = null;
@@ -66,6 +63,11 @@ export function createShow(
     index = i;
     const c = cues[i];
     emit("cue_fired", { cue: c.id, owner: c.owner, text: c.text });
+  };
+  const next = () => {
+    if (index + 1 < cues.length) return fire(index + 1);
+    phase = "done";
+    emit("done");
   };
   /** His own cue on program, or an explicit address from the operator once the show is rolling. Never while killed. */
   const speakAllowed = (addressed = false) =>
@@ -115,24 +117,14 @@ export function createShow(
         clockStartedAt = now();
         emit("clock_started");
       }
-      if (index + 1 >= cues.length) {
-        phase = "done";
-        emit("done");
-        return;
-      }
-      fire(index + 1);
+      next();
     },
 
     /** Operator skip. Never during the disclaimer. */
     advance() {
       if (phase === "coldopen") refuse("advance during the disclaimer; it plays to completion");
       if (phase !== "rolling") refuse(`advance from ${phase}`);
-      if (index + 1 >= cues.length) {
-        phase = "done";
-        emit("done");
-        return;
-      }
-      fire(index + 1);
+      next();
     },
 
     jumpTo(cueId: string) {
@@ -151,6 +143,16 @@ export function createShow(
         refuse(`Brandon spoke while not cued${killed ? " (kill switch engaged)" : ""}`);
       }
       emit("line_spoken", { cue: current()!.id, owner: "BRANDON", text });
+    },
+
+    /** Kill switch engaged with his cue on program: the line is not spoken, the log says so, the show moves on. */
+    drop() {
+      const c = current();
+      if (!c || c.owner !== "BRANDON" || !killed || phase !== "rolling") {
+        refuse(`drop ${c?.id ?? "nothing"}: only Brandon's cue on program, while killed`);
+      }
+      emit("line_dropped", { cue: c.id, owner: "BRANDON", text: c.text });
+      next();
     },
 
     /** Mute and freeze. Does not change phase or cue; the pipeline stays up. */
