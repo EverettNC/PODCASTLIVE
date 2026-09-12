@@ -20,7 +20,6 @@ import os
 import shutil
 import sys
 import uuid
-import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -67,6 +66,23 @@ def status() -> dict:
     }
 
 
+_engine = None
+_voice: str | None = None
+
+
+def engine_for(reference: str):
+    """The SDK's XTTS engine, loaded once and kept; the voice is swapped only when the reference changes."""
+    global _engine, _voice
+    from christman_voice_sdk.engines.xtts_engine import XTTSEngine
+
+    if _engine is None:
+        _engine = XTTSEngine()
+    if _voice != reference:
+        _engine.load_voice(Path(reference))
+        _voice = reference
+    return _engine
+
+
 def generate(body: dict) -> tuple[int, dict]:
     text = str(body.get("text") or "").strip()
     being = str(body.get("being") or "brandon").strip().lower()
@@ -81,18 +97,15 @@ def generate(body: dict) -> tuple[int, dict]:
     if not ref:
         return 503, {"error": "no-reference", "stage": "tts", "being": being}
 
-    from christman_voice_sdk.synthesis.voice_synthesis import synthesize_speech
-
-    wav = synthesize_speech(text, body.get("emotion_params") or {}, str(ref))
-    if not wav or not Path(wav).is_file():
-        return 503, {"error": "synthesis returned no audio", "stage": "tts", "being": being}
+    result = engine_for(str(ref)).synthesize(text, emotion_params=body.get("emotion_params") or None, language="en")
+    if result.degraded or result.audio is None:
+        return 503, {"error": "synthesis returned no audio", "stage": "tts", "being": being, "reason": result.error_reason}
 
     OUT.mkdir(parents=True, exist_ok=True)
     take = uuid.uuid4().hex
     dst = OUT / f"{take}.wav"
-    shutil.move(str(wav), dst)
-    with wave.open(str(dst), "rb") as w:
-        duration = w.getnframes() / w.getframerate()
+    result.save(dst)
+    duration = result.duration
 
     from christman_voice_sdk.synthesis.phoneme_labeler import PhonemeLabeler
 
@@ -107,6 +120,7 @@ def generate(body: dict) -> tuple[int, dict]:
         "being": being,
         "reference": str(ref),
         "phoneme_source": "mfa" if labeler.mfa_available else "energy",
+        "synthesis_seconds": round(result.synthesis_time, 1),
     }
 
 
