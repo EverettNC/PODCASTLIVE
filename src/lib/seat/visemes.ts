@@ -57,17 +57,3 @@ export function visemeFor(label: string): VisemeName {
       return "rest";
   }
 }
-
-export function mixShape(a: MouthShape, b: MouthShape, t: number): MouthShape {
-  const k = Math.min(1, Math.max(0, t));
-  const m = (x: number, y: number) => x + (y - x) * k;
-  return {
-    jaw: m(a.jaw, b.jaw),
-    width: m(a.width, b.width),
-    round: m(a.round, b.round),
-    teethTop: m(a.teethTop, b.teethTop),
-    teethBottom: m(a.teethBottom, b.teethBottom),
-    press: m(a.press, b.press),
-    bite: m(a.bite, b.bite),
-  };
-}

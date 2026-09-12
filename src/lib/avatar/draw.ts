@@ -1,6 +1,6 @@
 import type { FaceRig } from "./landmarks";
 import type { LipState } from "./lip-sync";
-import { drawMouth } from "../seat/mouth-draw.ts";
+import { drawMouth, rgb } from "../seat/mouth-draw.ts";
 
 export type DrawMapping = {
   dx: number;
@@ -9,14 +9,17 @@ export type DrawMapping = {
   dh: number;
 };
 
+// DOM guards: the same functions draw the pre-render under Node, where no element classes exist.
+const isVideo = (src: CanvasImageSource): src is HTMLVideoElement =>
+  typeof HTMLVideoElement !== "undefined" && src instanceof HTMLVideoElement;
+const isImage = (src: CanvasImageSource): src is HTMLImageElement =>
+  typeof HTMLImageElement !== "undefined" && src instanceof HTMLImageElement;
+
 function sourceSize(src: CanvasImageSource) {
-  if (src instanceof HTMLVideoElement) {
-    return { w: src.videoWidth, h: src.videoHeight };
-  }
-  if (src instanceof HTMLImageElement) {
-    return { w: src.naturalWidth, h: src.naturalHeight };
-  }
-  return { w: 0, h: 0 };
+  if (isVideo(src)) return { w: src.videoWidth, h: src.videoHeight };
+  if (isImage(src)) return { w: src.naturalWidth, h: src.naturalHeight };
+  const { width, height } = src as { width: number; height: number }; // canvas or skia image
+  return { w: width, h: height };
 }
 
 export function fitCover(
@@ -94,7 +97,7 @@ export function drawTalent(
     return;
   }
 
-  if (!(img instanceof HTMLVideoElement)) {
+  if (!isVideo(img)) {
     // Only the rendered seat gets a drawn mouth. Everett and Patty are people.
     if (rig.id === "talent") drawMouth(ctx, map, rig, lip.viseme, lip.open * lipGain);
     if (lip.blink > 0.04) drawBlink(ctx, dx, dy, dw, dh, lip.blink, rig);
@@ -119,7 +122,7 @@ export function drawBlink(
     const y = dy + eye.cy * dh;
     const rx = eye.rx * dw;
     const ry = eye.ry * dh * (0.35 + a * 0.85);
-    ctx.fillStyle = `rgba(${lid.r},${lid.g},${lid.b},${0.55 + a * 0.4})`;
+    ctx.fillStyle = rgb(lid, 0.55 + a * 0.4);
     ellipse(ctx, x, y - ry * 0.15, rx * 1.15, ry);
     ctx.fill();
   }

@@ -1,9 +1,12 @@
-import { InterlockError } from "@/lib/seat/interlock.ts";
+import type { Owner } from "@/lib/seat/cuebook.ts";
 import { playCurrent, show, standby } from "@/lib/seat/live.ts";
 import { stopSpeaking } from "@/lib/speak";
 import { CAMERA } from "@/lib/studio/camera";
 import { startRecording, stopRecording } from "@/lib/studio/record";
-import { useStudio } from "@/lib/studio-store";
+import { useStudio, type Shot } from "@/lib/studio-store";
+
+/** Where the switcher sits when the camera bible has no cue for the beat. */
+const SEAT_SHOT: Record<Owner, Shot> = { EVERETT: "lead", PATTY: "patty", BRANDON: "talent", BLACK: "black", TITLE: "cover" };
 
 /** ROLL: standby, then the cold open plays to completion before the clock starts, then every cue with its real audio. */
 export async function playEpisode() {
@@ -25,23 +28,12 @@ export async function playEpisode() {
     store.pushLog("system", "Rolling. Disclaimer first. The clock starts when it has played.");
     while (alive() && show.phase !== "done") {
       const c = show.current()!;
-      if (c.owner === "EVERETT" || c.owner === "PATTY" || c.owner === "BRANDON") {
-        const cue = CAMERA.find((x) => x.beatId === c.id);
-        store.setShot(cue?.shot ?? (c.owner === "PATTY" ? "patty" : c.owner === "BRANDON" ? "talent" : "lead"), "cut");
-      } else if (c.owner === "TITLE") {
-        store.setShot(c.id === "title" ? "cover" : "two", c.id === "title" ? "cut" : "scan");
-      } else {
-        store.setShot("black", "cut");
+      // The cold open stays over black, as the script stages it. The switcher moves once the clock runs.
+      if (show.phase === "rolling") {
+        if (c.owner === "TITLE" && c.id !== "title") store.setShot("two", "scan"); // clear to standing
+        else store.setShot(CAMERA.find((x) => x.beatId === c.id)?.shot ?? SEAT_SHOT[c.owner], "cut");
       }
-      try {
-        await playCurrent(alive);
-      } catch (err) {
-        if (err instanceof InterlockError && show.killed && c.owner === "BRANDON") {
-          show.advance(); // his line is dropped, logged, and the show moves on
-          continue;
-        }
-        throw err;
-      }
+      await playCurrent(alive);
     }
     if (alive()) store.takeBlack();
   } catch (err) {

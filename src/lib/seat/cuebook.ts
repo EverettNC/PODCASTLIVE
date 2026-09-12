@@ -1,7 +1,13 @@
+import type { FaceRig } from "../avatar/landmarks.ts";
 import { RUNDOWN, SHOW, type Beat } from "../studio/show.ts";
 
 export type Owner = "EVERETT" | "PATTY" | "BRANDON" | "BLACK" | "TITLE";
 export type Cue = { n: string; id: string; owner: Owner; label: string; text: string };
+export type Seat = FaceRig["id"];
+/** The plate a spoken cue plays on. Silent cues have no seat. */
+export const SEAT: Partial<Record<Owner, Seat>> = { EVERETT: "lead", PATTY: "patty", BRANDON: "talent" };
+/** How long a silent cue holds the picture. Script: "Hold 4-5 seconds" for the title. */
+export const HOLD_MS = { BLACK: 1500, TITLE: 4500 } as const;
 
 const OWNER: Record<Beat["speaker"], Owner> = {
   everett: "EVERETT",
@@ -22,11 +28,13 @@ export const CUES: Cue[] = RUNDOWN.map((b) => ({
   text: b.text,
 }));
 
-/** Everything before the first TITLE cue: the cold open through the disclaimer. Derived from the book, not listed by hand. */
-export const DISCLAIMER_CUES: Cue[] = CUES.slice(
-  0,
-  CUES.findIndex((c) => c.owner === "TITLE"),
-);
+/** The disclaimer block: the cold open through the last line before the first TITLE cue. A book without one cannot roll. */
+export function disclaimerOf(cues: Cue[]): Cue[] {
+  const end = cues.findIndex((c) => c.owner === "TITLE");
+  if (end < 1) throw new Error("cue book has no disclaimer block before the first TITLE cue; the interlock has nothing to hold");
+  return cues.slice(0, end);
+}
+export const DISCLAIMER_CUES = disclaimerOf(CUES);
 
 export function cueById(id: string): Cue {
   const c = CUES.find((x) => x.id === id);

@@ -5,13 +5,11 @@ let found: string | null = null;
 /** $FFMPEG, then ffmpeg on PATH, then the static binary imageio-ffmpeg installs. Loud if none. */
 export function ffmpegPath(): string {
   if (found) return found;
-  const fromPython = spawnSync("python3", ["-c", "import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())"], {
-    encoding: "utf8",
-  });
-  const candidates = [process.env.FFMPEG, "ffmpeg", fromPython.status === 0 ? fromPython.stdout.trim() : ""];
-  for (const c of candidates) {
-    if (c && spawnSync(c, ["-version"]).status === 0) return (found = c);
-  }
+  const works = (c: string) => c !== "" && spawnSync(c, ["-version"]).status === 0;
+  for (const c of [process.env.FFMPEG ?? "", "ffmpeg"]) if (works(c)) return (found = c);
+  const py = spawnSync("python3", ["-c", "import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())"], { encoding: "utf8" });
+  const fromPython = py.status === 0 ? py.stdout.trim() : "";
+  if (works(fromPython)) return (found = fromPython);
   throw new Error("ffmpeg not found: install it or set FFMPEG=/path/to/ffmpeg");
 }
 

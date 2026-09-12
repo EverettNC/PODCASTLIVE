@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, statSync } from "node:fs";
+import { mkdtempSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -15,6 +15,17 @@ import { openShowLog, readShowLog } from "./showlog.ts";
 const ROOT = join(import.meta.dirname, "..", "..", "..");
 const brandonCues = CUES.filter((c) => c.owner === "BRANDON");
 const refuses = (fn: () => void) => assert.throws(fn, InterlockError);
+async function offline(fn: () => Promise<void> | void) {
+  const saved = globalThis.fetch;
+  globalThis.fetch = () => {
+    throw new Error("network used");
+  };
+  try {
+    await fn();
+  } finally {
+    globalThis.fetch = saved;
+  }
+}
 
 test("AC-1: ROLL refuses to start the clock with the disclaimer skipped or shortened", () => {
   const log: ShowEvent[] = [];
@@ -80,6 +91,14 @@ test("AC-4: kill switch mutes and freezes immediately, pipeline survives", () =>
   show.release();
   assert.ok(show.speakAllowed());
   assert.deepEqual(log.filter((e) => e.kind === "kill" || e.kind === "release").map((e) => e.kind), ["kill", "release"]);
+
+  // His cue comes up while killed: the line is dropped on the record and the show moves on.
+  refuses(() => show.drop()); // nothing to drop while he is live
+  show.kill();
+  show.drop();
+  assert.deepEqual(log.slice(-2).map((e) => e.kind), ["line_dropped", "cue_fired"]);
+  assert.equal(log.at(-2)?.text, brandonCues[0].text, "the dropped line is logged verbatim");
+  assert.equal(show.phase, "rolling", "pipeline still up");
 });
 
 test("AC-6: a full run-through logs every cue and every Brandon line, append-only, on disk", () => {
@@ -114,22 +133,18 @@ test("stage 4->5: mouth frames come from the audio, not the text", () => {
   assert.ok(new Set(frames.map((f) => f.viseme)).size >= 4, "several shapes, not one");
 });
 
-test("AC-8: with no Hugging Face token the report names what is missing and never fetches", () => {
+test("AC-8: with no Hugging Face token the report names what is missing and never fetches", async () => {
   const saved = { HF_TOKEN: process.env.HF_TOKEN, HUGGING_FACE_HUB_TOKEN: process.env.HUGGING_FACE_HUB_TOKEN };
   delete process.env.HF_TOKEN;
   delete process.env.HUGGING_FACE_HUB_TOKEN;
-  const fetchSaved = globalThis.fetch;
-  globalThis.fetch = () => {
-    throw new Error("network used");
-  };
   try {
-    const r = modelReport(ROOT);
-    assert.equal(r.token, false);
-    assert.ok(r.models.length >= 5);
-    for (const m of r.models) assert.equal(typeof m.present, "boolean");
-    assert.ok(r.models.some((m) => !m.present), "this box is missing at least one model and says so");
+    await offline(() => {
+      const r = modelReport(ROOT);
+      assert.equal(r.token, false);
+      assert.ok(r.models.length >= 5);
+      assert.ok(r.models.some((m) => !m.present), "this box is missing at least one model and says so");
+    });
   } finally {
-    globalThis.fetch = fetchSaved;
     Object.assign(process.env, saved);
   }
 });
@@ -137,13 +152,9 @@ test("AC-8: with no Hugging Face token the report names what is missing and neve
 test("AC-5 + AC-7: a pre-rendered segment writes a playable file, disclaimer first, with no network", async () => {
   const dir = mkdtempSync(join(tmpdir(), "seat-"));
   const out = join(dir, "f1-b1.mp4");
-  const fetchSaved = globalThis.fetch;
-  globalThis.fetch = () => {
-    throw new Error("network used");
-  };
-  try {
+  await offline(async () => {
     const r = await prerender({ cueIds: ["f1-b1"], outPath: out, root: ROOT, width: 640, height: 360 });
-    assert.ok(existsSync(out) && statSync(out).size > 100_000, "file on disk");
+    assert.ok(statSync(out).size > 100_000, "file on disk");
     assert.deepEqual(r.cues.slice(0, DISCLAIMER_CUES.length).map((c) => c.id), DISCLAIMER_CUES.map((c) => c.id));
     assert.equal(r.cues[DISCLAIMER_CUES.length].id, "f1-b1");
     assert.equal(r.cues[DISCLAIMER_CUES.length].startSec, r.disclaimerEndSec, "the segment starts only after the disclaimer ends");
@@ -153,7 +164,5 @@ test("AC-5 + AC-7: a pre-rendered segment writes a playable file, disclaimer fir
     const m = probe.match(/Duration: (\d+):(\d+):([\d.]+)/)!;
     const dur = Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
     assert.ok(Math.abs(dur - r.durationSec) < 0.5, `duration ${dur} vs ${r.durationSec}`);
-  } finally {
-    globalThis.fetch = fetchSaved;
-  }
+  });
 });
