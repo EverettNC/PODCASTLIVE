@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { audioEngine } from "@/lib/avatar/audio-engine";
-import { drawCoverImage, drawTalent, fitCover, type DrawMapping } from "@/lib/avatar/draw";
+import { drawCoverImage, drawTalent, eyeFocus, fitCover, type DrawMapping } from "@/lib/avatar/draw";
 import { LEAD_RIG, PATTY_RIG, TALENT_RIG } from "@/lib/avatar/landmarks";
 import { createIdleMotion, type LipState } from "@/lib/avatar/lip-sync";
 import { CUES, SEAT, type Seat } from "@/lib/seat/cuebook.ts";
@@ -219,9 +219,9 @@ export function AvatarStage({
     programBus.attach(canvas);
 
     const seats = {
-      lead: { talk: leadTalk, idle: leadIdle, img: leadImg, motion: createIdleMotion(), rig: LEAD_RIG, lockTop: true, preferStill: true },
-      patty: { talk: pattyTalk, idle: pattyIdle, img: pattyImg, motion: createIdleMotion(), rig: PATTY_RIG, lockTop: false, preferStill: false },
-      talent: { talk: null, idle: null, img: talentImg, motion: createIdleMotion(), rig: TALENT_RIG, lockTop: false, preferStill: true },
+      lead: { talk: leadTalk, idle: leadIdle, img: leadImg, motion: createIdleMotion(), rig: LEAD_RIG, preferStill: true },
+      patty: { talk: pattyTalk, idle: pattyIdle, img: pattyImg, motion: createIdleMotion(), rig: PATTY_RIG, preferStill: false },
+      talent: { talk: null, idle: null, img: talentImg, motion: createIdleMotion(), rig: TALENT_RIG, preferStill: true },
     };
     let raf = 0;
     let running = true;
@@ -262,7 +262,7 @@ export function AvatarStage({
       if (src) {
         const { w: iw, h: ih } = sourceSize(src);
         if (iw > 1 && ih > 1) {
-          const map: DrawMapping = fitCover(w, h, iw, ih, seat.lockTop, 1);
+          const map: DrawMapping = fitCover(w, h, iw, ih, eyeFocus(seat.rig), 1);
           map.dx += x;
           map.dy += y;
           const still = !(src instanceof HTMLVideoElement);

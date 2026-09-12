@@ -22,21 +22,37 @@ function sourceSize(src: CanvasImageSource) {
   return { w: width, h: height };
 }
 
+/** Where the frame should hold the face: the eye line sits at this fraction of the frame's height. */
+const EYE_LINE = 0.42;
+
+/**
+ * Cover-fit an image into a frame. With a `focus` (a point on the image as
+ * fractions, normally the midpoint of the eyes), the crop keeps that point at
+ * the frame's centre line and eye line, clamped so the image still covers the
+ * frame. Without one, the crop is centred.
+ */
 export function fitCover(
   canvasW: number,
   canvasH: number,
   imgW: number,
   imgH: number,
-  lockTop = false,
+  focus?: { x: number; y: number },
   pad = 1,
 ): DrawMapping {
   const scale = Math.max(canvasW / imgW, canvasH / imgH) * pad;
   const dw = imgW * scale;
   const dh = imgH * scale;
-  const dx = (canvasW - dw) / 2;
-  const dy = lockTop ? 0 : (canvasH - dh) / 2; // lockTop keeps the head: the top edge stays in frame, the crop comes off the bottom
+  const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+  const dx = focus ? clamp(canvasW / 2 - focus.x * dw, Math.min(0, canvasW - dw), 0) : (canvasW - dw) / 2;
+  const dy = focus ? clamp(canvasH * EYE_LINE - focus.y * dh, Math.min(0, canvasH - dh), 0) : (canvasH - dh) / 2;
   return { dx, dy, dw, dh };
 }
+
+/** The point the crop holds onto: between the eyes. */
+export const eyeFocus = (rig: FaceRig) => ({
+  x: (rig.leftEye.cx + rig.rightEye.cx) / 2,
+  y: (rig.leftEye.cy + rig.rightEye.cy) / 2,
+});
 
 export function drawCoverImage(
   ctx: CanvasRenderingContext2D,

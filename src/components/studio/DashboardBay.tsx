@@ -16,8 +16,11 @@ export function DashboardBay() {
 
   return (
     <main className="flex min-h-0 flex-1 flex-col">
-      <section className="relative h-[44vh] shrink-0 p-3 sm:p-5 lg:px-10 lg:pt-6 lg:pb-3">
-        <ProgramMonitor className="h-full" />
+      {/* The program picture is 16:9 at any window shape, never a strip. */}
+      <section className="flex shrink-0 justify-center p-3 sm:p-5 lg:px-10 lg:pt-6 lg:pb-3">
+        <div className="aspect-video max-w-full" style={{ height: "min(56vh, 56.25vw)" }}>
+          <ProgramMonitor className="h-full" />
+        </div>
       </section>
 
       <div className="flex flex-wrap items-center gap-3 px-5 pb-3 sm:px-8 lg:px-10">
