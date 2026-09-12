@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { audioEngine } from "@/lib/avatar/audio-engine";
 import {
+  postBrandonLine,
   runHostCue,
   speakText,
   stopSpeaking,
@@ -412,7 +413,36 @@ function TalentPanel() {
           <HoldToTalk disabled={busy} />
         </div>
       </form>
+      <LineIn />
     </div>
+  );
+}
+
+/** Brandon's line-in: paste what the live seat said, and he says it. Same door the seat posts to. */
+function LineIn() {
+  const [text, setText] = useState("");
+  const status = useStudio((s) => s.status);
+  return (
+    <form
+      className="flex flex-col gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const t = text;
+        setText("");
+        void postBrandonLine(t);
+      }}
+    >
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Brandon's line — paste what the live seat said."
+        rows={2}
+        className="w-full resize-none rounded-[var(--radius-md)] bg-surface px-3 py-2.5 text-sm text-fg shadow-[var(--shadow-border)] outline-none placeholder:text-subtle focus-visible:ring-2 focus-visible:ring-accent/40"
+      />
+      <Button type="submit" variant="secondary" disabled={status === "speaking" || !text.trim()}>
+        Brandon says
+      </Button>
+    </form>
   );
 }
 

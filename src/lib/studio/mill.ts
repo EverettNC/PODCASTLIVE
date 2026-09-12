@@ -2,7 +2,7 @@ import type { BeatSpeaker } from "@/lib/studio/show";
 
 export type MillSeat = "everett" | "patty" | "talent";
 
-export const DEFAULT_MILL = "http://127.0.0.1:5000";
+export const DEFAULT_MILL = "http://127.0.0.1:1930";
 
 export const MILL_BEING: Record<MillSeat, string> = {
   everett: "everett",

@@ -9,7 +9,7 @@ export const FOUR_PIECES = [
     id: "voice",
     num: "02",
     title: "Voice",
-    body: "Christman-Sound. Voice Creation Center. Express wav first, then the mill on your box. No paid key in this app. Build has the drop. Seat the mill at http://127.0.0.1:5000 or drop a take on the line.",
+    body: "Christman-Sound. Voice Creation Center. Express wav first, then the mill on your box. No paid key in this app. Build has the drop. Seat the mill at http://127.0.0.1:1930 or drop a take on the line.",
   },
   {
     id: "route",

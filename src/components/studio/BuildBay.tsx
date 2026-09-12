@@ -109,6 +109,7 @@ export function BuildBay() {
           </div>
 
           <MillRack />
+          <KeyDrop />
 
           <section className="flex flex-col gap-3">
             <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-subtle">
@@ -370,7 +371,7 @@ function MillRack() {
             if (draft.trim() !== millUrl) void seatMill(draft);
           }}
           spellCheck={false}
-          placeholder="http://127.0.0.1:5000"
+          placeholder="http://127.0.0.1:1930"
           className="h-11 min-w-0 flex-1 rounded-[var(--radius-md)] bg-bg px-3 font-mono text-sm text-fg shadow-[var(--shadow-border)] outline-none placeholder:text-subtle focus-visible:ring-2 focus-visible:ring-accent/40"
         />
         <Button disabled={busy} onClick={() => void seatMill(draft)}>
@@ -560,5 +561,79 @@ function DropSlot({
         }}
       />
     </label>
+  );
+}
+
+/** The key drop. Keys land in show/keys.env on this machine, owner-only, never in the repo. The floor only ever sees the last four characters. */
+function KeyDrop() {
+  const pushLog = useStudio((s) => s.pushLog);
+  const [have, setHave] = useState<Record<string, string>>({});
+  const [key, setKey] = useState("");
+  const [model, setModel] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void fetch("/api/keys")
+      .then((r) => r.json() as Promise<Record<string, string>>)
+      .then(setHave)
+      .catch(() => pushLog("system", "Key drop could not be read."));
+  }, [pushLog]);
+
+  async function drop(name: string, value: string) {
+    const res = await fetch("/api/keys", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, value }) });
+    const body = (await res.json()) as Record<string, string> & { error?: string };
+    if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+    setHave(body);
+  }
+
+  async function save() {
+    setBusy(true);
+    try {
+      if (key.trim()) await drop("NVIDIA_API_KEY", key);
+      if (model.trim()) await drop("NVIDIA_MODEL", model);
+      setKey("");
+      pushLog("system", "Key drop saved. Brandon's brain follows the drop on his next line.");
+    } catch (err) {
+      pushLog("system", `Key drop refused: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="flex flex-col gap-4 rounded-[var(--radius-lg)] bg-surface p-4 shadow-[var(--shadow-border)] sm:p-5">
+      <div>
+        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-subtle">Key drop</p>
+        <h3 className="mt-1 text-lg font-medium tracking-tight">Brandon's brain</h3>
+        <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted">
+          A live seat answers first. With no seat, NVIDIA's catalog answers when a key is dropped here; with no key, local Ollama.
+          Keys stay on this machine. {have.NVIDIA_API_KEY ? `NVIDIA key on file: ${have.NVIDIA_API_KEY}.` : "No NVIDIA key on file."}
+          {have.NVIDIA_MODEL ? ` Model: ${have.NVIDIA_MODEL}.` : ""}
+        </p>
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <input
+          type="password"
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+          aria-label="NVIDIA API key"
+          placeholder="NVIDIA API key"
+          className="h-11 min-w-0 flex-1 rounded-[var(--radius-md)] bg-bg px-3 font-mono text-sm text-fg shadow-[var(--shadow-border)] outline-none placeholder:text-subtle focus-visible:ring-2 focus-visible:ring-accent/40"
+        />
+        <input
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          spellCheck={false}
+          aria-label="NVIDIA model id"
+          placeholder="model id, e.g. meta/llama-3.1-8b-instruct"
+          className="h-11 min-w-0 flex-1 rounded-[var(--radius-md)] bg-bg px-3 font-mono text-sm text-fg shadow-[var(--shadow-border)] outline-none placeholder:text-subtle focus-visible:ring-2 focus-visible:ring-accent/40"
+        />
+        <Button disabled={busy || (!key.trim() && !model.trim())} onClick={() => void save()}>
+          {busy ? "Saving…" : "Drop keys"}
+        </Button>
+      </div>
+    </section>
   );
 }
