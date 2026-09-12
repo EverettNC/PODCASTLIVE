@@ -18,8 +18,8 @@ export const SHAPES: Record<VisemeName, MouthShape> = {
   TH: { jaw: 0.3, width: 1.05, round: 0, teethTop: 0.8, teethBottom: 0.6, press: 0, bite: 0 },
   DD: { jaw: 0.35, width: 1.1, round: 0, teethTop: 0.9, teethBottom: 0.3, press: 0, bite: 0 },
   SS: { jaw: 0.2, width: 1.2, round: 0, teethTop: 1, teethBottom: 0.9, press: 0, bite: 0 },
-  AA: { jaw: 1, width: 1.05, round: 0.2, teethTop: 0.5, teethBottom: 0.2, press: 0, bite: 0 },
-  EE: { jaw: 0.45, width: 1.3, round: 0, teethTop: 0.9, teethBottom: 0.5, press: 0, bite: 0 },
+  AA: { jaw: 1, width: 1.05, round: 0.2, teethTop: 0.35, teethBottom: 0.15, press: 0, bite: 0 },
+  EE: { jaw: 0.5, width: 1.3, round: 0, teethTop: 0.6, teethBottom: 0.25, press: 0, bite: 0 },
   OH: { jaw: 0.8, width: 0.8, round: 0.8, teethTop: 0.2, teethBottom: 0, press: 0, bite: 0 },
   OU: { jaw: 0.4, width: 0.6, round: 1, teethTop: 0, teethBottom: 0, press: 0.1, bite: 0 },
 };
