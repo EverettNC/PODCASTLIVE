@@ -1,0 +1,3 @@
+[submodule "vendor/Christman-Sound"]
+	path = vendor/Christman-Sound
+	url = https://github.com/EverettNC/Christman-Sound.git

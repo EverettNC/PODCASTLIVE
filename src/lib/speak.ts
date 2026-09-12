@@ -78,7 +78,7 @@ export async function speakText(text: string, voiceId?: string): Promise<boolean
   } catch (err) {
     if (!heard) {
       const why = err instanceof Error ? err.message : String(err);
-      store.setError(`Take failed: ${why}. If the mill is down: python3 -m christman_voice_sdk.mill`);
+      store.setError(`Take failed: ${why}. If the voice server is down: npm run voice`);
     }
   } finally {
     audioEngine.stopPlayback();
