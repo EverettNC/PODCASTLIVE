@@ -3,3 +3,7 @@ node_modules/
 .github_repo
 .env
 .env.*
+
+# Third Seat runtime outputs: renders and the append-only show log are not source
+show/renders/
+show/*.jsonl

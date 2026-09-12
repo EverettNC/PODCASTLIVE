@@ -47,7 +47,7 @@ export const TALENT_RIG: FaceRig = {
   width: 1920,
   height: 1080,
   eyeY: 0.37,
-  mouth: { cx: 0.5, cy: 0.445, rx: 0.028, ry: 0.022 },
+  mouth: { cx: 0.5, cy: 0.445, rx: 0.034, ry: 0.022 },
   leftEye: { cx: 0.46, cy: 0.37, rx: 0.018, ry: 0.016 },
   rightEye: { cx: 0.54, cy: 0.37, rx: 0.018, ry: 0.016 },
   skin: { r: 210, g: 162, b: 132 },

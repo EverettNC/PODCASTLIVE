@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { ProgramMonitor } from "@/components/studio/AvatarStage";
 import { Button } from "@/components/ui/button";
+import { jumpTo } from "@/lib/seat/live.ts";
 import { runHostCue } from "@/lib/speak";
 import { playEpisode, stopEpisode } from "@/lib/studio/director";
 import { probeMill } from "@/lib/studio/mill";
@@ -13,7 +14,6 @@ export function DashboardBay() {
   const status = useStudio((s) => s.status);
   const shot = useStudio((s) => s.shot);
   const beatId = useStudio((s) => s.beatId);
-  const setBeat = useStudio((s) => s.setBeat);
   const takeBlack = useStudio((s) => s.takeBlack);
   const takeIntro = useStudio((s) => s.takeIntro);
   const takeShow = useStudio((s) => s.takeShow);
@@ -176,7 +176,7 @@ export function DashboardBay() {
                 Take standing
               </Button>
             )}
-            <Button variant="ghost" disabled={!nextBeat} onClick={() => nextBeat && setBeat(nextBeat.id)}>
+            <Button variant="ghost" disabled={!nextBeat} onClick={() => nextBeat && jumpTo(nextBeat.id)}>
               Next
             </Button>
           </div>
@@ -191,7 +191,7 @@ export function DashboardBay() {
               <button
                 key={b.id}
                 type="button"
-                onClick={() => setBeat(b.id)}
+                onClick={() => jumpTo(b.id)}
                 className={cn(
                   "flex w-full items-baseline gap-3 rounded-[var(--radius-md)] px-3 py-2 text-left",
                   b.id === beat.id ? "bg-surface-2 text-fg" : "text-muted hover:text-fg",

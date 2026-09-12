@@ -1,5 +1,6 @@
 import type { FaceRig } from "./landmarks";
 import type { LipState } from "./lip-sync";
+import { drawMouth } from "../seat/mouth-draw.ts";
 
 export type DrawMapping = {
   dx: number;
@@ -72,7 +73,7 @@ export function drawTalent(
   img: CanvasImageSource,
   map: DrawMapping,
   lip: LipState,
-  _lipGain: number,
+  lipGain: number,
   rig: FaceRig,
 ) {
   const { dx, dy, dw, dh } = map;
@@ -93,14 +94,16 @@ export function drawTalent(
     return;
   }
 
-  if (!(img instanceof HTMLVideoElement) && lip.blink > 0.04) {
-    drawBlink(ctx, dx, dy, dw, dh, lip.blink, rig);
+  if (!(img instanceof HTMLVideoElement)) {
+    // Only the rendered seat gets a drawn mouth. Everett and Patty are people.
+    if (rig.id === "talent") drawMouth(ctx, map, rig, lip.viseme, lip.open * lipGain);
+    if (lip.blink > 0.04) drawBlink(ctx, dx, dy, dw, dh, lip.blink, rig);
   }
 
   ctx.restore();
 }
 
-function drawBlink(
+export function drawBlink(
   ctx: CanvasRenderingContext2D,
   dx: number,
   dy: number,
