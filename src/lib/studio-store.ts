@@ -3,8 +3,8 @@ import { DEFAULT_LOOK, lookById } from "@/lib/studio/looks";
 import { DEFAULT_MILL, type MillSeat } from "@/lib/studio/mill";
 import { DEFAULT_INTRO, DEFAULT_SHOW } from "@/lib/studio/sets";
 import { APOLOGY_COPY, RUNDOWN, SHOW } from "@/lib/studio/show";
-import { DEFAULT_VOICE } from "@/lib/xai/voices";
-import type { ChatTurn } from "@/lib/xai/talk";
+import { DEFAULT_VOICE } from "@/lib/studio/voices";
+import type { ChatTurn } from "@/lib/seat/brain.ts";
 import type { Phase } from "@/lib/seat/interlock.ts";
 
 export type RuntimeStatus = "idle" | "listening" | "thinking" | "speaking";

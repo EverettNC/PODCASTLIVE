@@ -7,7 +7,7 @@ import { LearnBay } from "@/components/studio/LearnBay";
 import { StudioBoundary } from "@/components/studio/StudioBoundary";
 import { TopBar } from "@/components/studio/TopBar";
 import { hydrateStudio, useStudio } from "@/lib/studio-store";
-import { getAiStatus } from "@/lib/xai/talk";
+import { getAiStatus } from "@/lib/seat/brain-rpc.ts";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -18,8 +18,14 @@ function Home() {
   useEffect(() => {
     hydrateStudio();
     void getAiStatus()
-      .then((s) => setAiReady(s.ready))
-      .catch(() => setAiReady(false));
+      .then((s) => {
+        setAiReady(s.ready);
+        useStudio.getState().pushLog("system", s.ready ? `Brandon's model: ${s.detail}.` : `Brandon cannot answer live. ${s.detail}`);
+      })
+      .catch((err: unknown) => {
+        setAiReady(false);
+        useStudio.getState().pushLog("system", `Brandon's model check failed: ${err instanceof Error ? err.message : String(err)}`);
+      });
     const onErr = () => useStudio.getState().setError("A take failed. The floor is still up.");
     window.addEventListener("error", onErr);
     window.addEventListener("unhandledrejection", onErr);
