@@ -6,7 +6,7 @@ it lives in vendor/Christman-Sound (git submodule) or wherever $CHRISTMAN_SOUND 
 and nothing in it is modified.
 
 Run:  npm run voice        (python3 voice/server.py)
-Env:  CHRISTMAN_SOUND (SDK checkout), VOICE_PORT (default 1930), CHRISTMAN_OUTPUT_DIR.
+Env:  CHRISTMAN_SOUND (SDK checkout), VOICE_PORT (default 1930), VOICE_DEVICE (default cpu), CHRISTMAN_OUTPUT_DIR.
 
 Degrades loudly: /status lists exactly which modules and voices are missing, and
 /generate refuses with the same list instead of returning silence.
@@ -76,7 +76,8 @@ def engine_for(reference: str):
     from christman_voice_sdk.engines.xtts_engine import XTTSEngine
 
     if _engine is None:
-        _engine = XTTSEngine()
+        # cpu unless told otherwise: an Intel Mac's MPS path lacks the FFT op XTTS needs
+        _engine = XTTSEngine(device=os.environ.get("VOICE_DEVICE", "cpu"))
     if _voice != reference:
         _engine.load_voice(Path(reference))
         _voice = reference
