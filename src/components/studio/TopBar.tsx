@@ -7,10 +7,8 @@ import { useStudio, type Bay } from "@/lib/studio-store";
 import { cn } from "@/lib/utils";
 
 const BAYS: { id: Bay; label: string }[] = [
-  { id: "floor", label: "Dashboard" },
+  { id: "floor", label: "Show" },
   { id: "build", label: "Build" },
-  { id: "cover", label: "Cover" },
-  { id: "learn", label: "Learn" },
 ];
 
 export function TopBar() {

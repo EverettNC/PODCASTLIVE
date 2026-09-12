@@ -4,6 +4,7 @@ import { ProgramMonitor } from "@/components/studio/AvatarStage";
 import { Button } from "@/components/ui/button";
 import { HOST_LOOKS } from "@/lib/studio/looks";
 import { probeMill, type MillSeat } from "@/lib/studio/mill";
+import { SET_BACKDROPS } from "@/lib/studio/sets";
 import { RUNDOWN } from "@/lib/studio/show";
 import {
   introBackdropSrc,
@@ -126,12 +127,27 @@ export function BuildBay() {
               />
               <SetSlot
                 label="Show backdrop"
-                hint={showUrl ? "Custom plugged" : "Honesty above all else"}
+                hint={showUrl ? "Plugged" : "Standing"}
                 src={showSrc}
                 active={shot !== "cover"}
                 onPreview={() => setShot("two")}
                 onFile={(file) => onFile(file, "show")}
               />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {SET_BACKDROPS.map((b) => (
+                <Button
+                  key={b.id}
+                  variant={showSrc === b.src ? "air" : "secondary"}
+                  onClick={() => {
+                    plugShowSet(b.src);
+                    setShot("two");
+                    pushLog("system", `Standing set: ${b.label}.`);
+                  }}
+                >
+                  {b.label}
+                </Button>
+              ))}
             </div>
           </section>
 
@@ -260,8 +276,6 @@ function MillRack() {
   const millOk = useStudio((s) => s.millOk);
   const millEngine = useStudio((s) => s.millEngine);
   const setMillStatus = useStudio((s) => s.setMillStatus);
-  const millPath = useStudio((s) => s.millPath);
-  const setMillPath = useStudio((s) => s.setMillPath);
   const beatId = useStudio((s) => s.beatId);
   const expressBeat = useStudio((s) => s.expressBeat);
   const plugExpress = useStudio((s) => s.plugExpress);
@@ -309,9 +323,7 @@ function MillRack() {
           const being = (pack.being_name || "").toLowerCase();
           const which: MillSeat =
             being === "patty" ? "patty" : being === "brandon" || being === "cletus" ? "talent" : "everett";
-          pushLog("system", `Pack · ${pack.being_name ?? file.name}. Path the mill can read, below.`);
-          if (seat) setMillPath(seat, millPath[seat]);
-          else setMillPath(which, millPath[which]);
+          pushLog("system", `Pack · ${pack.being_name ?? file.name} for ${seat ?? which}. Voices live in voices/; the server finds them.`);
         } catch {
           pushLog("system", "That pack file did not read.");
         }
@@ -346,11 +358,11 @@ function MillRack() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-subtle">
-            Voice mill
+            Voice server
           </p>
           <h3 className="mt-1 text-lg font-medium tracking-tight">Christman-Sound</h3>
           <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted">
-            Voice Creation Center. Express first, then the mill. No paid key. Ever.
+            Your three voices are in voices/. The server on 1930 speaks them through the Christman Voice SDK. No paid key.
           </p>
         </div>
         <span
@@ -375,25 +387,8 @@ function MillRack() {
           className="h-11 min-w-0 flex-1 rounded-[var(--radius-md)] bg-bg px-3 font-mono text-sm text-fg shadow-[var(--shadow-border)] outline-none placeholder:text-subtle focus-visible:ring-2 focus-visible:ring-accent/40"
         />
         <Button disabled={busy} onClick={() => void seatMill(draft)}>
-          {busy ? "Seating…" : "Seat mill"}
+          {busy ? "Checking…" : "Check"}
         </Button>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        {(["everett", "patty", "talent"] as const).map((seat) => (
-          <label key={seat} className="flex flex-col gap-1.5">
-            <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-subtle">
-              {seat === "talent" ? "Brandon path" : `${seat} path`}
-            </span>
-            <input
-              value={millPath[seat]}
-              onChange={(e) => setMillPath(seat, e.target.value)}
-              spellCheck={false}
-              placeholder="reference.wav on the mill"
-              className="h-10 rounded-[var(--radius-md)] bg-bg px-3 font-mono text-xs text-fg shadow-[var(--shadow-border)] outline-none placeholder:text-subtle focus-visible:ring-2 focus-visible:ring-accent/40"
-            />
-          </label>
-        ))}
       </div>
 
       <div>

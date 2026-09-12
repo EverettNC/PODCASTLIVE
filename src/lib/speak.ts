@@ -43,6 +43,7 @@ export async function speakText(text: string, voiceId?: string): Promise<boolean
   const takes = splitTakes(text);
   if (!takes.length) return false;
   store.clearError();
+  const gen = store.rollGen; // Stop moves the generation on; a take dispatched before it must not play after it
   const cue = CUES.find((c) => c.id === store.beatId);
   const seat: Seat = voiceId ? "talent" : ((cue && SEAT[cue.owner]) ?? "talent");
   if (seat === "talent") {
@@ -61,15 +62,16 @@ export async function speakText(text: string, voiceId?: string): Promise<boolean
 
   const voice = voiceId ?? SEAT_VOICE[millSeat(seat)];
   const being = beingFor(millSeat(seat));
-  const reference = store.millPath[millSeat(seat)];
+  const reference = ""; // the voice server finds each seat's voice in voices/ on its own
   let heard = false;
 
   try {
+    const stale = () => useStudio.getState().status !== "speaking" || useStudio.getState().rollGen !== gen;
     for (const take of takes) {
-      if (useStudio.getState().status !== "speaking") break;
+      if (stale()) break;
       store.setCaption(take);
       const got = await synthesize(take, voice, being, reference);
-      if (useStudio.getState().status !== "speaking") break;
+      if (stale()) break;
       const ctx = audioEngine.ctx;
       if (!ctx) throw new Error("audio context unavailable");
       const buf = await ctx.decodeAudioData(got.audio.slice(0));
@@ -107,6 +109,7 @@ export async function runHostCue(cue: string) {
   store.setStatus("thinking");
   store.pushLog("producer", line);
   store.pushHistory({ role: "user", content: line });
+  const gen = store.rollGen;
 
   // The address goes up for the live seat first. If a seat is in the chair, its line wins; else the in-app brain answers.
   const opened = (await fetch("/api/brandon/cue", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ text: line }) })
@@ -128,6 +131,7 @@ export async function runHostCue(cue: string) {
     30000,
     { ok: false as const, error: "busy" as const, detail: "no reply within 30 s" },
   );
+  if (useStudio.getState().rollGen !== gen) return store.setStatus("idle"); // Stop was pressed while he was thinking
   if (!result.ok) {
     store.setStatus("idle");
     store.setError(`Brandon's model is ${result.error}: ${result.detail}. He says nothing.`);

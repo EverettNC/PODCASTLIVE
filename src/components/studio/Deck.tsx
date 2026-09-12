@@ -10,15 +10,12 @@ import {
   stopSpeaking,
 } from "@/lib/speak";
 import { jumpTo } from "@/lib/seat/live.ts";
-import { DRIVES } from "@/lib/studio/guide";
-import { RUNDOWN, SHOW, type Beat } from "@/lib/studio/show";
-import { useStudio, type DriveMode } from "@/lib/studio-store";
+import { RUNDOWN, type Beat } from "@/lib/studio/show";
+import { useStudio } from "@/lib/studio-store";
 import { cn } from "@/lib/utils";
 import { VOICES } from "@/lib/studio/voices";
 
 export function Deck() {
-  const drive = useStudio((s) => s.drive);
-  const setDrive = useStudio((s) => s.setDrive);
   const voice = useStudio((s) => s.voice);
   const setVoice = useStudio((s) => s.setVoice);
   const volume = useStudio((s) => s.volume);
@@ -31,13 +28,11 @@ export function Deck() {
   const setOnAir = useStudio((s) => s.setOnAir);
   const status = useStudio((s) => s.status);
   const error = useStudio((s) => s.error);
-  const helpOpen = useStudio((s) => s.helpOpen);
   const shot = useStudio((s) => s.shot);
   const takeIntro = useStudio((s) => s.takeIntro);
   const takeShow = useStudio((s) => s.takeShow);
   const takeBlack = useStudio((s) => s.takeBlack);
   const live = onAir || status === "speaking" || status === "listening";
-  const driveHelp = DRIVES.find((d) => d.id === drive);
 
   useEffect(() => {
     audioEngine.setVolume(volume);
@@ -46,19 +41,12 @@ export function Deck() {
   return (
     <aside className="min-h-0 overflow-y-auto overscroll-contain border-t border-border">
       <div className="mx-auto flex w-full max-w-[90rem] flex-col gap-4 px-4 py-4 sm:px-8 sm:py-5 lg:px-8">
-        {helpOpen && <HelpStrip />}
-
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-2xl">
             <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-subtle">
               Floor
             </p>
             <h2 className="mt-1 text-lg font-medium tracking-tight">Control</h2>
-            {driveHelp && (
-              <p className="mt-1 hidden max-w-xl text-sm leading-relaxed text-muted sm:block">
-                {driveHelp.body}
-              </p>
-            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-full bg-surface p-1 shadow-[var(--shadow-border)]">
@@ -113,33 +101,12 @@ export function Deck() {
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(16rem,22rem)]">
           <div className="flex min-w-0 flex-col gap-4">
-            <div className="grid grid-cols-2 gap-1 rounded-[var(--radius-lg)] bg-surface p-1 shadow-[var(--shadow-border)] sm:grid-cols-4">
-              {(
-                [
-                  ["book", "Rundown"],
-                  ["talent", "Cue"],
-                  ["copy", "Copy"],
-                  ["mic", "Mic"],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setDrive(id satisfies DriveMode)}
-                  className={cn(
-                    "h-11 rounded-[var(--radius-md)] text-sm font-medium transition-colors duration-150",
-                    drive === id ? "bg-surface-2 text-fg" : "text-muted hover:text-fg",
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
+            <RundownPanel />
+            <TalentPanel />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <MicPanel />
+              <CopyPanel />
             </div>
-
-            {drive === "book" && <RundownPanel />}
-            {drive === "talent" && <TalentPanel />}
-            {drive === "copy" && <CopyPanel />}
-            {drive === "mic" && <MicPanel />}
           </div>
 
           <div className="flex flex-col gap-5">
@@ -229,30 +196,6 @@ export function Deck() {
         </div>
       </div>
     </aside>
-  );
-}
-
-function HelpStrip() {
-  const dismissHelp = useStudio((s) => s.dismissHelp);
-  const setBay = useStudio((s) => s.setBay);
-  return (
-    <div className="hidden flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] bg-surface px-4 py-3 shadow-[var(--shadow-border)] sm:flex sm:px-5">
-      <p className="max-w-3xl text-sm leading-relaxed text-muted">
-        {SHOW.title}. Cold open over black. Title card. Standing set. Cue the
-        co-host from the rundown.{" "}
-        <button
-          type="button"
-          className="text-fg underline decoration-border underline-offset-4 hover:decoration-fg"
-          onClick={() => setBay("learn")}
-        >
-          Learn the four pieces
-        </button>
-        . Nothing here is locked.
-      </p>
-      <Button variant="ghost" size="sm" onClick={dismissHelp}>
-        Got it
-      </Button>
-    </div>
   );
 }
 

@@ -1,9 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { BuildBay } from "@/components/studio/BuildBay";
-import { CoverBay } from "@/components/studio/CoverStage";
 import { DashboardBay } from "@/components/studio/DashboardBay";
-import { LearnBay } from "@/components/studio/LearnBay";
 import { StudioBoundary } from "@/components/studio/StudioBoundary";
 import { TopBar } from "@/components/studio/TopBar";
 import { hydrateStudio, useStudio } from "@/lib/studio-store";
@@ -39,15 +37,7 @@ function Home() {
     <div className="flex h-dvh flex-col overflow-hidden bg-bg">
       <TopBar />
       <StudioBoundary>
-        {bay === "cover" ? (
-          <CoverBay />
-        ) : bay === "learn" ? (
-          <LearnBay />
-        ) : bay === "build" ? (
-          <BuildBay />
-        ) : (
-          <DashboardBay />
-        )}
+        {bay === "build" ? <BuildBay /> : <DashboardBay />}
       </StudioBoundary>
     </div>
   );

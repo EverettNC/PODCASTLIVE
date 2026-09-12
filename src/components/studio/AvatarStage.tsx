@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { audioEngine } from "@/lib/avatar/audio-engine";
-import { drawCoverImage, drawTalent, fitCover, type DrawMapping } from "@/lib/avatar/draw";
+import { drawCoverImage, drawTalent, eyeFocus, fitCover, type DrawMapping } from "@/lib/avatar/draw";
 import { LEAD_RIG, PATTY_RIG, TALENT_RIG } from "@/lib/avatar/landmarks";
 import { createIdleMotion, type LipState } from "@/lib/avatar/lip-sync";
 import { CUES, SEAT, type Seat } from "@/lib/seat/cuebook.ts";
@@ -211,7 +211,6 @@ export function AvatarStage({
     const leadTalk = loadVideo("/avatar/live/everett-talk.mp4");
     const pattyIdle = loadVideo("/avatar/live/patty.mp4");
     const pattyTalk = loadVideo("/avatar/live/patty-talk.mp4");
-    const stageVid = loadVideo("/avatar/live/stage.mp4");
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
@@ -220,9 +219,9 @@ export function AvatarStage({
     programBus.attach(canvas);
 
     const seats = {
-      lead: { talk: leadTalk, idle: leadIdle, img: leadImg, motion: createIdleMotion(), rig: LEAD_RIG, lockTop: true, preferStill: true },
-      patty: { talk: pattyTalk, idle: pattyIdle, img: pattyImg, motion: createIdleMotion(), rig: PATTY_RIG, lockTop: false, preferStill: false },
-      talent: { talk: null, idle: null, img: talentImg, motion: createIdleMotion(), rig: TALENT_RIG, lockTop: false, preferStill: true },
+      lead: { talk: leadTalk, idle: leadIdle, img: leadImg, motion: createIdleMotion(), rig: LEAD_RIG, preferStill: true },
+      patty: { talk: pattyTalk, idle: pattyIdle, img: pattyImg, motion: createIdleMotion(), rig: PATTY_RIG, preferStill: false },
+      talent: { talk: null, idle: null, img: talentImg, motion: createIdleMotion(), rig: TALENT_RIG, preferStill: true },
     };
     let raf = 0;
     let running = true;
@@ -263,7 +262,7 @@ export function AvatarStage({
       if (src) {
         const { w: iw, h: ih } = sourceSize(src);
         if (iw > 1 && ih > 1) {
-          const map: DrawMapping = fitCover(w, h, iw, ih, seat.lockTop, 1);
+          const map: DrawMapping = fitCover(w, h, iw, ih, eyeFocus(seat.rig), 1);
           map.dx += x;
           map.dy += y;
           const still = !(src instanceof HTMLVideoElement);
@@ -271,18 +270,6 @@ export function AvatarStage({
         }
       }
       ctx.restore();
-    };
-
-    const drawDesk = () => {
-      const y = cssH * 0.72;
-      const g = ctx.createLinearGradient(0, y, 0, cssH);
-      g.addColorStop(0, "#3a281c");
-      g.addColorStop(0.18, "#5a3c28");
-      g.addColorStop(1, "#1a120e");
-      ctx.fillStyle = g;
-      ctx.fillRect(0, y, cssW, cssH - y);
-      ctx.fillStyle = "rgba(212,168,96,0.28)";
-      ctx.fillRect(0, y, cssW, 3);
     };
 
     const drawBlack = () => {
@@ -301,15 +288,19 @@ export function AvatarStage({
     };
 
     const drawWide = (talks: Record<Seat, boolean>) => {
-      const stage = plateSource(null, stageVid, setImg, false);
-      if (stage) drawCoverImage(ctx, stage, 0, 0, cssW, cssH);
-      const headH = Math.max(1, Math.round(cssH * 0.72));
-      const gap = 4;
-      const paneW = Math.max(1, (cssW - gap * 2) / 3);
-      pane(seats.lead, 0, 0, paneW, headH, talks.lead);
-      pane(seats.patty, paneW + gap, 0, paneW, headH, talks.patty);
-      pane(seats.talent, (paneW + gap) * 2, 0, paneW, headH, talks.talent);
-      drawDesk();
+      // The standing set fills the frame; the three seats sit in front of it along the bottom.
+      if (setImg.complete && setImg.naturalWidth > 1) drawCoverImage(ctx, setImg, 0, 0, cssW, cssH);
+      else {
+        ctx.fillStyle = "#0c0c0e";
+        ctx.fillRect(0, 0, cssW, cssH);
+      }
+      const gap = Math.round(cssW * 0.012);
+      const paneW = Math.max(1, (cssW - gap * 4) / 3);
+      const paneH = Math.max(1, Math.round(cssH * 0.68));
+      const y = cssH - paneH;
+      pane(seats.lead, gap, y, paneW, paneH, talks.lead);
+      pane(seats.patty, gap * 2 + paneW, y, paneW, paneH, talks.patty);
+      pane(seats.talent, gap * 3 + paneW * 2, y, paneW, paneH, talks.talent);
     };
 
     const drawStanding = (state: ReturnType<typeof useStudio.getState>) => {
@@ -366,7 +357,7 @@ export function AvatarStage({
     };
 
     raf = requestAnimationFrame(loop);
-    const videos = [leadIdle, leadTalk, pattyIdle, pattyTalk, stageVid];
+    const videos = [leadIdle, leadTalk, pattyIdle, pattyTalk];
     const kick = () => {
       lastDraw = 0;
       for (const v of videos) v.play().catch(() => {});

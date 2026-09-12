@@ -6,7 +6,7 @@ it lives in vendor/Christman-Sound (git submodule) or wherever $CHRISTMAN_SOUND 
 and nothing in it is modified.
 
 Run:  npm run voice        (python3 voice/server.py)
-Env:  CHRISTMAN_SOUND (SDK checkout), VOICE_PORT (default 1930), CHRISTMAN_OUTPUT_DIR.
+Env:  CHRISTMAN_SOUND (SDK checkout), VOICE_PORT (default 1930), VOICE_DEVICE (default cpu), CHRISTMAN_OUTPUT_DIR.
 
 Degrades loudly: /status lists exactly which modules and voices are missing, and
 /generate refuses with the same list instead of returning silence.
@@ -20,7 +20,6 @@ import os
 import shutil
 import sys
 import uuid
-import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -67,6 +66,24 @@ def status() -> dict:
     }
 
 
+_engine = None
+_voice: str | None = None
+
+
+def engine_for(reference: str):
+    """The SDK's XTTS engine, loaded once and kept; the voice is swapped only when the reference changes."""
+    global _engine, _voice
+    from christman_voice_sdk.engines.xtts_engine import XTTSEngine
+
+    if _engine is None:
+        # cpu unless told otherwise: an Intel Mac's MPS path lacks the FFT op XTTS needs
+        _engine = XTTSEngine(device=os.environ.get("VOICE_DEVICE", "cpu"))
+    if _voice != reference:
+        _engine.load_voice(Path(reference))
+        _voice = reference
+    return _engine
+
+
 def generate(body: dict) -> tuple[int, dict]:
     text = str(body.get("text") or "").strip()
     being = str(body.get("being") or "brandon").strip().lower()
@@ -81,18 +98,15 @@ def generate(body: dict) -> tuple[int, dict]:
     if not ref:
         return 503, {"error": "no-reference", "stage": "tts", "being": being}
 
-    from christman_voice_sdk.synthesis.voice_synthesis import synthesize_speech
-
-    wav = synthesize_speech(text, body.get("emotion_params") or {}, str(ref))
-    if not wav or not Path(wav).is_file():
-        return 503, {"error": "synthesis returned no audio", "stage": "tts", "being": being}
+    result = engine_for(str(ref)).synthesize(text, emotion_params=body.get("emotion_params") or None, language="en")
+    if result.degraded or result.audio is None:
+        return 503, {"error": "synthesis returned no audio", "stage": "tts", "being": being, "reason": result.error_reason}
 
     OUT.mkdir(parents=True, exist_ok=True)
     take = uuid.uuid4().hex
     dst = OUT / f"{take}.wav"
-    shutil.move(str(wav), dst)
-    with wave.open(str(dst), "rb") as w:
-        duration = w.getnframes() / w.getframerate()
+    result.save(dst)
+    duration = result.duration
 
     from christman_voice_sdk.synthesis.phoneme_labeler import PhonemeLabeler
 
@@ -107,6 +121,7 @@ def generate(body: dict) -> tuple[int, dict]:
         "being": being,
         "reference": str(ref),
         "phoneme_source": "mfa" if labeler.mfa_available else "energy",
+        "synthesis_seconds": round(result.synthesis_time, 1),
     }
 
 

@@ -3,9 +3,10 @@ import { once } from "node:events";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { GlobalFonts, createCanvas, loadImage, type Canvas, type Image } from "@napi-rs/canvas";
-import { drawTalent, fitCover } from "../avatar/draw.ts";
+import { drawTalent, eyeFocus, fitCover } from "../avatar/draw.ts";
 import { TALENT_RIG } from "../avatar/landmarks.ts";
 import { sway } from "../avatar/lip-sync.ts";
+import { DEFAULT_SHOW } from "../studio/sets.ts";
 import { SHOW } from "../studio/show.ts";
 import { decodePcm, ffmpegPath, wavBytes } from "./audio-node.ts";
 import { DISCLAIMER_CUES, HOLD_MS, cueById, type Cue, type Owner } from "./cuebook.ts";
@@ -52,7 +53,7 @@ export async function prerender(o: RenderOpts): Promise<RenderResult> {
   const cues = [...DISCLAIMER_CUES, ...wanted.filter((c) => !DISCLAIMER_CUES.includes(c))];
 
   ensureFont();
-  const backdrop = await plate(join(root, "public/backdrop/stage.png"), W, H);
+  const backdrop = await plate(join(root, "public", DEFAULT_SHOW), W, H);
   const titleCard = await plate(join(root, "public/backdrop/intro.png"), W, H);
   const brandon = await loadImage(join(root, "public", TALENT_RIG.src));
 
@@ -174,7 +175,7 @@ function drawFrame(
   const fr = frameAt(seg.frames, tRel, fps);
   const lip = { ...fr, blink: blinkAt(tRel, seg.seed), ...sway(tRel, fr.open > 0.05) };
   // The same call the live stage makes, so the render and the floor draw the one rig.
-  drawTalent(ctx, brandon as unknown as CanvasImageSource, fitCover(W, H, brandon.width, brandon.height), lip, 1, TALENT_RIG);
+  drawTalent(ctx, brandon as unknown as CanvasImageSource, fitCover(W, H, brandon.width, brandon.height, eyeFocus(TALENT_RIG)), lip, 1, TALENT_RIG);
   drawCaption(ctx, W, H, captionAt(cue.text, tRel, seg.end - seg.start));
 }
 

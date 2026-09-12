@@ -10,3 +10,4 @@ show/*.jsonl
 
 # API keys dropped in the Build bay live here, owner-only, never in the repo
 show/keys.env
+show/takes/
