@@ -131,31 +131,3 @@ export function stopSpeaking() {
   store.setStatus("idle");
   store.setCaption(null);
 }
-
-type BrowserSpeech = {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((ev: {
-    results: {
-      length: number;
-      [i: number]: { isFinal: boolean; 0: { transcript: string } };
-    };
-  }) => void) | null;
-  onerror: ((ev: { error: string }) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-};
-
-/** Browser speech recognition. Hosted by the browser vendor, not local: flagged for replacement by THE FILAMENT. */
-export function createSpeechRecognizer(): BrowserSpeech | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as {
-    SpeechRecognition?: new () => BrowserSpeech;
-    webkitSpeechRecognition?: new () => BrowserSpeech;
-  };
-  const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
-  if (!Ctor) return null;
-  return new Ctor();
-}

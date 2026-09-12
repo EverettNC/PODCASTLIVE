@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { decodePcm, ffmpegPath } from "./audio-node.ts";
 import { ask, brainStatus } from "./brain.ts";
+import { earStatus, hear } from "./ear.ts";
 import { CUES, DISCLAIMER_CUES } from "./cuebook.ts";
 import { mouthFrames } from "./envelope.ts";
 import { InterlockError, createShow, type ShowEvent } from "./interlock.ts";
@@ -171,6 +172,44 @@ test("stage 3: Brandon's reply comes from local Ollama only, and every failure n
   const r3 = await ask("Patty, what did the log show?", [{ role: "user", content: "earlier" }], up);
   assert.deepEqual(r3, { ok: true, text: "Two providers, one day, no disclosure. Patty?" });
   assert.ok(urls.every((u) => u.startsWith("http://127.0.0.1:11434/")), `only the local endpoint: ${urls.join(" ")}`);
+});
+
+test("stage 2: the operator's words come from THE FILAMENT's ear only; an empty ear stays empty", async () => {
+  const urls: string[] = [];
+  const stub = (handler: (url: string, init?: RequestInit) => Response | never) =>
+    ((url: string, init?: RequestInit) => {
+      urls.push(url);
+      return Promise.resolve(handler(url, init));
+    }) as unknown as typeof fetch;
+  const tape = new Blob([new Uint8Array(4000)], { type: "audio/webm" });
+
+  const down = stub(() => {
+    throw new Error("ECONNREFUSED");
+  });
+  assert.match((await earStatus(down)).detail, /not reachable.*vosk_ear\.py/);
+  const r1 = await hear(tape, down);
+  assert.ok(!r1.ok && r1.error === "offline");
+
+  const unseated = stub(() =>
+    Response.json({ ok: false, seated: false, error: "Vosk model is not seated at /x. Empty ear stays empty." }, { status: 503 }),
+  );
+  assert.equal((await earStatus(unseated)).ready, false);
+  const r2 = await hear(tape, unseated);
+  assert.ok(!r2.ok && r2.error === "unseated" && /not seated/.test(r2.detail));
+
+  const seated = stub((url, init) => {
+    if (url.endsWith("/health")) return Response.json({ ok: true, seated: true, model: "/models/vosk-lgraph" });
+    const file = (init?.body as FormData).get("file");
+    assert.ok(file instanceof Blob && file.size === 4000, "the tape rides as multipart `file`");
+    return Response.json({ ok: true, seated: true, text: " Patty, what did the log show? ", words: [] });
+  });
+  assert.equal((await earStatus(seated)).ready, true);
+  assert.deepEqual(await hear(tape, seated), { ok: true, text: "Patty, what did the log show?", note: undefined });
+
+  const silent = stub(() => Response.json({ ok: true, seated: true, text: "", note: "Empty ear stays empty. No invented speech." }));
+  const r4 = await hear(tape, silent);
+  assert.ok(r4.ok && r4.text === "" && /Empty ear/.test(r4.note ?? ""), "silence is reported as silence, not invented");
+  assert.ok(urls.every((u) => u.startsWith("http://127.0.0.1:4850/")), `only the local door: ${urls.join(" ")}`);
 });
 
 test("AC-8: with no Hugging Face token the report names what is missing and never fetches", async () => {

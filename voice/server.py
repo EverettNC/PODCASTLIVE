@@ -41,7 +41,10 @@ def missing_modules() -> list[str]:
 
 
 def reference_for(being: str) -> dict:
-    """Where this being's voice comes from, or why it cannot be found."""
+    """Where this being's voice comes from, or why it cannot be found. The show's own voices/ first, then the SDK's search."""
+    own = ROOT / "voices" / f"{being}.wav"
+    if own.is_file():
+        return {"path": str(own), "error": None}
     try:
         from CHRISTMAN_EAR_CANAL.VOICES import resolve_being_reference
     except Exception as exc:  # the resolver itself is broken: say so, do not guess a path
