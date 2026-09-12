@@ -211,7 +211,6 @@ export function AvatarStage({
     const leadTalk = loadVideo("/avatar/live/everett-talk.mp4");
     const pattyIdle = loadVideo("/avatar/live/patty.mp4");
     const pattyTalk = loadVideo("/avatar/live/patty-talk.mp4");
-    const stageVid = loadVideo("/avatar/live/stage.mp4");
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
@@ -289,14 +288,19 @@ export function AvatarStage({
     };
 
     const drawWide = (talks: Record<Seat, boolean>) => {
-      const stage = plateSource(null, stageVid, setImg, false);
-      if (stage) drawCoverImage(ctx, stage, 0, 0, cssW, cssH);
-      // Three seats, full height, no painted desk: each plate is its own studio.
-      const gap = 4;
-      const paneW = Math.max(1, (cssW - gap * 2) / 3);
-      pane(seats.lead, 0, 0, paneW, cssH, talks.lead);
-      pane(seats.patty, paneW + gap, 0, paneW, cssH, talks.patty);
-      pane(seats.talent, (paneW + gap) * 2, 0, paneW, cssH, talks.talent);
+      // The standing set fills the frame; the three seats sit in front of it along the bottom.
+      if (setImg.complete && setImg.naturalWidth > 1) drawCoverImage(ctx, setImg, 0, 0, cssW, cssH);
+      else {
+        ctx.fillStyle = "#0c0c0e";
+        ctx.fillRect(0, 0, cssW, cssH);
+      }
+      const gap = Math.round(cssW * 0.012);
+      const paneW = Math.max(1, (cssW - gap * 4) / 3);
+      const paneH = Math.max(1, Math.round(cssH * 0.68));
+      const y = cssH - paneH;
+      pane(seats.lead, gap, y, paneW, paneH, talks.lead);
+      pane(seats.patty, gap * 2 + paneW, y, paneW, paneH, talks.patty);
+      pane(seats.talent, gap * 3 + paneW * 2, y, paneW, paneH, talks.talent);
     };
 
     const drawStanding = (state: ReturnType<typeof useStudio.getState>) => {
@@ -353,7 +357,7 @@ export function AvatarStage({
     };
 
     raf = requestAnimationFrame(loop);
-    const videos = [leadIdle, leadTalk, pattyIdle, pattyTalk, stageVid];
+    const videos = [leadIdle, leadTalk, pattyIdle, pattyTalk];
     const kick = () => {
       lastDraw = 0;
       for (const v of videos) v.play().catch(() => {});

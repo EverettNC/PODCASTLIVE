@@ -6,6 +6,7 @@ import { GlobalFonts, createCanvas, loadImage, type Canvas, type Image } from "@
 import { drawTalent, fitCover } from "../avatar/draw.ts";
 import { TALENT_RIG } from "../avatar/landmarks.ts";
 import { sway } from "../avatar/lip-sync.ts";
+import { DEFAULT_SHOW } from "../studio/sets.ts";
 import { SHOW } from "../studio/show.ts";
 import { decodePcm, ffmpegPath, wavBytes } from "./audio-node.ts";
 import { DISCLAIMER_CUES, HOLD_MS, cueById, type Cue, type Owner } from "./cuebook.ts";
@@ -52,7 +53,7 @@ export async function prerender(o: RenderOpts): Promise<RenderResult> {
   const cues = [...DISCLAIMER_CUES, ...wanted.filter((c) => !DISCLAIMER_CUES.includes(c))];
 
   ensureFont();
-  const backdrop = await plate(join(root, "public/backdrop/stage.png"), W, H);
+  const backdrop = await plate(join(root, "public", DEFAULT_SHOW), W, H);
   const titleCard = await plate(join(root, "public/backdrop/intro.png"), W, H);
   const brandon = await loadImage(join(root, "public", TALENT_RIG.src));
 

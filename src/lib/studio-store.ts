@@ -303,6 +303,7 @@ export const useStudio = create<StudioState>((set, get) => ({
     });
     get().pushLog("system", "Episode One is rolling.");
   },
+  /** Stop, or the roll ran out. The clock stops, and the generation moves on so anything still in flight bails. */
   finishRoll: (url) => {
     set({
       rolling: false,
@@ -312,6 +313,8 @@ export const useStudio = create<StudioState>((set, get) => ({
       caption: null,
       lineStarted: 0,
       lineDur: 0,
+      rolledAt: null,
+      rollGen: get().rollGen + 1,
     });
     get().pushLog("system", url ? "Tape is in. Replay is ready." : "Roll complete.");
   },

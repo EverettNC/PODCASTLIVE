@@ -4,6 +4,7 @@ import { ProgramMonitor } from "@/components/studio/AvatarStage";
 import { Button } from "@/components/ui/button";
 import { HOST_LOOKS } from "@/lib/studio/looks";
 import { probeMill, type MillSeat } from "@/lib/studio/mill";
+import { SET_BACKDROPS } from "@/lib/studio/sets";
 import { RUNDOWN } from "@/lib/studio/show";
 import {
   introBackdropSrc,
@@ -126,12 +127,27 @@ export function BuildBay() {
               />
               <SetSlot
                 label="Show backdrop"
-                hint={showUrl ? "Custom plugged" : "Honesty above all else"}
+                hint={showUrl ? "Plugged" : "Standing"}
                 src={showSrc}
                 active={shot !== "cover"}
                 onPreview={() => setShot("two")}
                 onFile={(file) => onFile(file, "show")}
               />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {SET_BACKDROPS.map((b) => (
+                <Button
+                  key={b.id}
+                  variant={showSrc === b.src ? "air" : "secondary"}
+                  onClick={() => {
+                    plugShowSet(b.src);
+                    setShot("two");
+                    pushLog("system", `Standing set: ${b.label}.`);
+                  }}
+                >
+                  {b.label}
+                </Button>
+              ))}
             </div>
           </section>
 
