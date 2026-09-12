@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { audioEngine } from "@/lib/avatar/audio-engine";
 import {
-  createSpeechRecognizer,
   runHostCue,
   speakText,
   stopSpeaking,
@@ -473,53 +472,75 @@ function MicPanel() {
   );
 }
 
+/** Hold: the mic records a tape. Release: the tape goes to THE FILAMENT's ear, and the words go to Brandon. */
 function HoldToTalk({ disabled }: { disabled: boolean }) {
-  const recRef = useRef<ReturnType<typeof createSpeechRecognizer>>(null);
+  const recRef = useRef<MediaRecorder | null>(null);
   const [held, setHeld] = useState(false);
-  const [supported, setSupported] = useState(true);
+  const [ear, setEar] = useState<{ ready: boolean; detail: string } | null>(null);
 
   useEffect(() => {
-    setSupported(Boolean(createSpeechRecognizer()));
+    let alive = true;
+    fetch("/api/stt")
+      .then((r) => r.json() as Promise<{ ready: boolean; detail: string }>)
+      .then((s) => {
+        if (!alive) return;
+        setEar(s);
+        useStudio.getState().pushLog("system", s.ready ? `Ear: ${s.detail}.` : `Hold-to-talk is off. ${s.detail}`);
+      })
+      .catch((err: unknown) => alive && setEar({ ready: false, detail: err instanceof Error ? err.message : String(err) }));
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  function start() {
-    if (disabled) return;
-    const rec = createSpeechRecognizer();
-    if (!rec) {
-      setSupported(false);
-      return;
-    }
-    rec.lang = "en-US";
-    rec.continuous = false;
-    rec.interimResults = false;
-    rec.onresult = (ev) => {
-      const last = ev.results[ev.results.length - 1];
-      const text = last?.[0]?.transcript?.trim();
-      if (text) void runHostCue(text);
-    };
-    rec.onerror = () => {
-      setHeld(false);
-      useStudio.getState().setStatus("idle");
-    };
-    rec.onend = () => setHeld(false);
-    recRef.current = rec;
+  async function deliver(tape: Blob) {
+    const store = useStudio.getState();
+    store.setStatus("idle");
+    if (tape.size < 64) return;
     try {
+      const res = await fetch("/api/stt", { method: "POST", headers: { "Content-Type": tape.type || "application/octet-stream" }, body: tape });
+      const heard = (await res.json()) as { ok: boolean; text?: string; note?: string; detail?: string };
+      if (!heard.ok) return store.setError(`Ear: ${heard.detail}`);
+      if (!heard.text) return store.pushLog("system", heard.note ?? "Empty ear stays empty. No invented speech.");
+      void runHostCue(heard.text);
+    } catch (err) {
+      store.setError(`Ear: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  async function start() {
+    if (disabled || held) return;
+    const store = useStudio.getState();
+    const ownsMic = !audioEngine.micStream;
+    try {
+      const stream = ownsMic ? await audioEngine.startMic() : audioEngine.micStream!;
+      const rec = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+      rec.ondataavailable = (e) => {
+        if (e.data.size) chunks.push(e.data);
+      };
+      rec.onstop = () => {
+        if (ownsMic) audioEngine.stopMic();
+        void deliver(new Blob(chunks, { type: rec.mimeType }));
+      };
       rec.start();
+      recRef.current = rec;
       setHeld(true);
-      useStudio.getState().setStatus("listening");
-    } catch {
-      setSupported(false);
+      store.setStatus("listening");
+    } catch (err) {
+      store.setError(`Mic: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
   function stop() {
-    recRef.current?.stop();
+    if (recRef.current?.state === "recording") recRef.current.stop();
+    recRef.current = null;
     setHeld(false);
   }
 
-  if (!supported) {
+  if (!ear?.ready) {
     return (
-      <Button type="button" variant="outline" disabled title="Type the cue instead">
+      <Button type="button" variant="outline" disabled title={ear?.detail ?? "Checking the ear"}>
         <Mic />
         Hold
       </Button>
