@@ -7,7 +7,7 @@ import { beingFor, type MillSeat } from "@/lib/studio/mill";
 import { useStudio } from "@/lib/studio-store";
 import { settle } from "@/lib/studio/hard";
 import { splitTakes } from "@/lib/text";
-import { askHost } from "@/lib/xai/talk";
+import { askHost } from "@/lib/seat/brain-rpc.ts";
 
 export { splitTakes };
 
@@ -78,7 +78,7 @@ export async function speakText(text: string, voiceId?: string): Promise<boolean
   } catch (err) {
     if (!heard) {
       const why = err instanceof Error ? err.message : String(err);
-      store.setError(`Take failed: ${why}. If the mill is down: python3 -m christman_voice_sdk.mill`);
+      store.setError(`Take failed: ${why}. If the voice server is down: npm run voice`);
     }
   } finally {
     audioEngine.stopPlayback();
@@ -106,17 +106,19 @@ export async function runHostCue(cue: string) {
   store.setStatus("thinking");
   store.pushLog("producer", line);
   store.pushHistory({ role: "user", content: line });
+  // A local model on a laptop can take a while on a long cue; the cap matches the server's own timeout.
   const result = await settle(
-    askHost({ data: { cue: line, history: useStudio.getState().history } }).catch(() => ({
+    askHost({ data: { cue: line, history: useStudio.getState().history } }).catch((err: unknown) => ({
       ok: false as const,
       error: "offline" as const,
+      detail: err instanceof Error ? err.message : String(err),
     })),
-    9000,
-    { ok: false as const, error: "busy" as const },
+    30000,
+    { ok: false as const, error: "busy" as const, detail: "no reply within 30 s" },
   );
   if (!result.ok) {
     store.setStatus("idle");
-    store.setError(`The seat's model is ${result.error}. Brandon says nothing.`);
+    store.setError(`Brandon's model is ${result.error}: ${result.detail}. He says nothing.`);
     return;
   }
   // speakText puts the line through the interlock; only a line he actually said joins his history.

@@ -14,7 +14,7 @@ import { DRIVES } from "@/lib/studio/guide";
 import { RUNDOWN, SHOW, type Beat } from "@/lib/studio/show";
 import { useStudio, type DriveMode } from "@/lib/studio-store";
 import { cn } from "@/lib/utils";
-import { VOICES } from "@/lib/xai/voices";
+import { VOICES } from "@/lib/studio/voices";
 
 export function Deck() {
   const drive = useStudio((s) => s.drive);

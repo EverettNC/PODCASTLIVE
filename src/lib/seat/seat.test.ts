@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { decodePcm, ffmpegPath } from "./audio-node.ts";
+import { ask, brainStatus } from "./brain.ts";
 import { CUES, DISCLAIMER_CUES } from "./cuebook.ts";
 import { mouthFrames } from "./envelope.ts";
 import { InterlockError, createShow, type ShowEvent } from "./interlock.ts";
@@ -131,6 +132,45 @@ test("stage 4->5: mouth frames come from the audio, not the text", () => {
   assert.ok(frames.slice(0, 3).every((f) => f.open < 0.05), "silence before the line reads as rest");
   assert.ok(frames.filter((f) => f.open > 0.15).length > 100, "the line opens the mouth");
   assert.ok(new Set(frames.map((f) => f.viseme)).size >= 4, "several shapes, not one");
+});
+
+test("stage 3: Brandon's reply comes from local Ollama only, and every failure names itself", async () => {
+  process.env.OLLAMA_MODEL = "llama3.1";
+  const urls: string[] = [];
+  const stub = (handler: (url: string, body?: string) => Response | never) =>
+    ((url: string, init?: RequestInit) => {
+      urls.push(url);
+      return Promise.resolve(handler(url, init?.body as string | undefined));
+    }) as unknown as typeof fetch;
+
+  const down = stub(() => {
+    throw new Error("ECONNREFUSED");
+  });
+  assert.equal((await brainStatus(down)).ready, false);
+  assert.match((await brainStatus(down)).detail, /not reachable.*ollama serve/);
+  const r1 = await ask("hello", [], down);
+  assert.ok(!r1.ok && r1.error === "offline");
+
+  const noModel = stub((url) =>
+    url.endsWith("/api/tags") ? Response.json({ models: [{ name: "other:latest" }] }) : new Response("{}", { status: 404 }),
+  );
+  assert.match((await brainStatus(noModel)).detail, /ollama pull llama3\.1/);
+  const r2 = await ask("hello", [], noModel);
+  assert.ok(!r2.ok && r2.error === "no-model");
+
+  const up = stub((url, body) => {
+    if (url.endsWith("/api/tags")) return Response.json({ models: [{ name: "llama3.1:latest" }] });
+    const req = JSON.parse(body!) as { model: string; stream: boolean; messages: { role: string; content: string }[] };
+    assert.equal(req.model, "llama3.1");
+    assert.equal(req.stream, false);
+    assert.equal(req.messages[0].role, "system");
+    assert.equal(req.messages.at(-1)?.content, "Patty, what did the log show?");
+    return Response.json({ message: { role: "assistant", content: " Two providers, one day, no disclosure. Patty? " } });
+  });
+  assert.equal((await brainStatus(up)).ready, true);
+  const r3 = await ask("Patty, what did the log show?", [{ role: "user", content: "earlier" }], up);
+  assert.deepEqual(r3, { ok: true, text: "Two providers, one day, no disclosure. Patty?" });
+  assert.ok(urls.every((u) => u.startsWith("http://127.0.0.1:11434/")), `only the local endpoint: ${urls.join(" ")}`);
 });
 
 test("AC-8: with no Hugging Face token the report names what is missing and never fetches", async () => {
