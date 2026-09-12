@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { DEFAULT_LOOK, lookById } from "@/lib/studio/looks";
-import { DEFAULT_MILL, type MillSeat } from "@/lib/studio/mill";
+import { DEFAULT_MILL } from "@/lib/studio/mill";
 import { DEFAULT_INTRO, DEFAULT_SHOW } from "@/lib/studio/sets";
 import { APOLOGY_COPY, RUNDOWN, SHOW } from "@/lib/studio/show";
 import { DEFAULT_VOICE } from "@/lib/studio/voices";
@@ -9,7 +9,7 @@ import type { Phase } from "@/lib/seat/interlock.ts";
 
 export type RuntimeStatus = "idle" | "listening" | "thinking" | "speaking";
 export type DriveMode = "book" | "talent" | "copy" | "mic";
-export type Bay = "floor" | "build" | "cover" | "learn";
+export type Bay = "floor" | "build";
 export type Shot = "black" | "two" | "lead" | "talent" | "patty" | "cover";
 export type CamMove = "cut" | "scan" | "dump";
 export type Caption = { id: number; text: string };
@@ -40,23 +40,15 @@ type Persist = {
   lookId: string;
   shot: Shot;
   episode: string;
-  helpOpen: boolean;
   millUrl: string;
-  millPath: Record<MillSeat, string>;
 };
-
-function emptyPaths(): Record<MillSeat, string> {
-  return { everett: "", patty: "", talent: "" };
-}
 
 function readPersist(): Persist {
   const fallback: Persist = {
     lookId: DEFAULT_LOOK,
     shot: "cover",
     episode: DEFAULT_EPISODE,
-    helpOpen: false,
     millUrl: DEFAULT_MILL,
-    millPath: emptyPaths(),
   };
   if (typeof window === "undefined") return fallback;
   try {
@@ -67,13 +59,7 @@ function readPersist(): Persist {
       lookId: p.lookId || DEFAULT_LOOK,
       shot: migrateShot(p.shot),
       episode: typeof p.episode === "string" ? p.episode : DEFAULT_EPISODE,
-      helpOpen: p.helpOpen === true,
       millUrl: typeof p.millUrl === "string" && p.millUrl.trim() ? p.millUrl : DEFAULT_MILL,
-      millPath: {
-        everett: p.millPath?.everett ?? "",
-        patty: p.millPath?.patty ?? "",
-        talent: p.millPath?.talent ?? "",
-      },
     };
   } catch {
     return fallback;
@@ -115,7 +101,6 @@ type StudioState = {
   history: ChatTurn[];
   log: { id: number; role: LogRole; text: string }[];
   aiReady: boolean | null;
-  helpOpen: boolean;
   error: string | null;
   rolledAt: number | null;
   rollGen: number;
@@ -124,14 +109,12 @@ type StudioState = {
   millUrl: string;
   millOk: boolean | null;
   millEngine: string | null;
-  millPath: Record<MillSeat, string>;
   expressBeat: Record<string, string>;
   phase: Phase;
   killed: boolean;
   programBeat: (id: string) => void;
   setMillUrl: (v: string) => void;
   setMillStatus: (ok: boolean | null, engine: string | null) => void;
-  setMillPath: (seat: MillSeat, path: string) => void;
   plugExpress: (beatId: string, url: string | null) => void;
   setOnAir: (v: boolean) => void;
   setStatus: (s: RuntimeStatus) => void;
@@ -163,7 +146,6 @@ type StudioState = {
   pushLog: (role: LogRole, text: string) => void;
   pushHistory: (turn: ChatTurn) => void;
   setAiReady: (v: boolean) => void;
-  dismissHelp: () => void;
   setError: (v: string | null) => void;
   clearError: () => void;
 };
@@ -179,9 +161,7 @@ function persistSlice(s: StudioState): Persist {
     lookId: s.lookId,
     shot: s.shot,
     episode: s.episode,
-    helpOpen: s.helpOpen,
     millUrl: s.millUrl,
-    millPath: s.millPath,
   };
 }
 
@@ -218,7 +198,6 @@ export const useStudio = create<StudioState>((set, get) => ({
     },
   ],
   aiReady: null,
-  helpOpen: false,
   error: null,
   rolledAt: null,
   rollGen: 0,
@@ -227,7 +206,6 @@ export const useStudio = create<StudioState>((set, get) => ({
   millUrl: DEFAULT_MILL,
   millOk: null,
   millEngine: null,
-  millPath: emptyPaths(),
   expressBeat: {},
   phase: "standby",
   killed: false,
@@ -236,10 +214,6 @@ export const useStudio = create<StudioState>((set, get) => ({
     writePersist(persistSlice(get()));
   },
   setMillStatus: (millOk, millEngine) => set({ millOk, millEngine }),
-  setMillPath: (seat, path) => {
-    set({ millPath: { ...get().millPath, [seat]: path } });
-    writePersist(persistSlice(get()));
-  },
   plugExpress: (beatId, url) => {
     const next = { ...get().expressBeat };
     const prev = next[beatId];
@@ -322,7 +296,6 @@ export const useStudio = create<StudioState>((set, get) => ({
       bay: "floor",
       shot: "black",
       beatId: "cold",
-      helpOpen: false,
       caption: null,
       error: null,
       status: "idle",
@@ -394,10 +367,6 @@ export const useStudio = create<StudioState>((set, get) => ({
   pushHistory: (turn) =>
     set((s) => ({ history: [...s.history, turn].slice(-8) })),
   setAiReady: (aiReady) => set({ aiReady }),
-  dismissHelp: () => {
-    set({ helpOpen: false });
-    writePersist(persistSlice(get()));
-  },
   setError: (error) => set({ error }),
   clearError: () => set({ error: null }),
 }));
@@ -434,9 +403,7 @@ export function hydrateStudio() {
       lookId: p.lookId,
       shot: p.shot,
       episode: p.episode,
-      helpOpen: p.helpOpen,
       millUrl: p.millUrl,
-      millPath: p.millPath,
     });
   } catch {
     /* keep defaults */

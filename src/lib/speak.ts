@@ -61,7 +61,7 @@ export async function speakText(text: string, voiceId?: string): Promise<boolean
 
   const voice = voiceId ?? SEAT_VOICE[millSeat(seat)];
   const being = beingFor(millSeat(seat));
-  const reference = store.millPath[millSeat(seat)];
+  const reference = ""; // the voice server finds each seat's voice in voices/ on its own
   let heard = false;
 
   try {

@@ -34,7 +34,7 @@ export function fitCover(
   const dw = imgW * scale;
   const dh = imgH * scale;
   const dx = (canvasW - dw) / 2;
-  const dy = lockTop ? Math.min(0, canvasH - dh) : (canvasH - dh) / 2;
+  const dy = lockTop ? 0 : (canvasH - dh) / 2; // lockTop keeps the head: the top edge stays in frame, the crop comes off the bottom
   return { dx, dy, dw, dh };
 }
 

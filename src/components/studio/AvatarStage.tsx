@@ -273,18 +273,6 @@ export function AvatarStage({
       ctx.restore();
     };
 
-    const drawDesk = () => {
-      const y = cssH * 0.72;
-      const g = ctx.createLinearGradient(0, y, 0, cssH);
-      g.addColorStop(0, "#3a281c");
-      g.addColorStop(0.18, "#5a3c28");
-      g.addColorStop(1, "#1a120e");
-      ctx.fillStyle = g;
-      ctx.fillRect(0, y, cssW, cssH - y);
-      ctx.fillStyle = "rgba(212,168,96,0.28)";
-      ctx.fillRect(0, y, cssW, 3);
-    };
-
     const drawBlack = () => {
       ctx.fillStyle = "#0c0c0e";
       ctx.fillRect(0, 0, cssW, cssH);
@@ -303,13 +291,12 @@ export function AvatarStage({
     const drawWide = (talks: Record<Seat, boolean>) => {
       const stage = plateSource(null, stageVid, setImg, false);
       if (stage) drawCoverImage(ctx, stage, 0, 0, cssW, cssH);
-      const headH = Math.max(1, Math.round(cssH * 0.72));
+      // Three seats, full height, no painted desk: each plate is its own studio.
       const gap = 4;
       const paneW = Math.max(1, (cssW - gap * 2) / 3);
-      pane(seats.lead, 0, 0, paneW, headH, talks.lead);
-      pane(seats.patty, paneW + gap, 0, paneW, headH, talks.patty);
-      pane(seats.talent, (paneW + gap) * 2, 0, paneW, headH, talks.talent);
-      drawDesk();
+      pane(seats.lead, 0, 0, paneW, cssH, talks.lead);
+      pane(seats.patty, paneW + gap, 0, paneW, cssH, talks.patty);
+      pane(seats.talent, (paneW + gap) * 2, 0, paneW, cssH, talks.talent);
     };
 
     const drawStanding = (state: ReturnType<typeof useStudio.getState>) => {
