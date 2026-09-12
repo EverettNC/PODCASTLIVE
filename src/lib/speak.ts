@@ -7,6 +7,7 @@ import { beingFor, type MillSeat } from "@/lib/studio/mill";
 import { useStudio } from "@/lib/studio-store";
 import { settle } from "@/lib/studio/hard";
 import { splitTakes } from "@/lib/text";
+import type { Reply } from "@/lib/seat/brain.ts";
 import { askHost } from "@/lib/seat/brain-rpc.ts";
 
 export { splitTakes };
@@ -106,8 +107,19 @@ export async function runHostCue(cue: string) {
   store.setStatus("thinking");
   store.pushLog("producer", line);
   store.pushHistory({ role: "user", content: line });
+
+  // The address goes up for the live seat first. If a seat is in the chair, its line wins; else the in-app brain answers.
+  const opened = (await fetch("/api/brandon/cue", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ text: line }) })
+    .then((r) => r.json())
+    .catch(() => ({ liveSeat: false }))) as { liveSeat: boolean };
+  let result: Reply | null = null;
+  if (opened.liveSeat) {
+    store.pushLog("system", "Live seat is in the chair. Waiting for Brandon's line.");
+    result = await waitForLine(LINE_WAIT_MS);
+    if (!result) store.pushLog("system", "No line from the live seat in time. The in-app brain answers.");
+  }
   // A local model on a laptop can take a while on a long cue; the cap matches the server's own timeout.
-  const result = await settle(
+  result ??= await settle(
     askHost({ data: { cue: line, history: useStudio.getState().history } }).catch((err: unknown) => ({
       ok: false as const,
       error: "offline" as const,
@@ -121,8 +133,33 @@ export async function runHostCue(cue: string) {
     store.setError(`Brandon's model is ${result.error}: ${result.detail}. He says nothing.`);
     return;
   }
+  store.pushLog("system", `Brandon via ${result.via}.`);
   // speakText puts the line through the interlock; only a line he actually said joins his history.
   if (await speakText(result.text, SEAT_VOICE.talent)) store.pushHistory({ role: "assistant", content: result.text });
+}
+
+const JSON_HEADERS = { "Content-Type": "application/json" };
+const LINE_WAIT_MS = 20000;
+
+/** Poll the line-in until the live seat answers, the wait runs out, or the operator moves on. */
+async function waitForLine(ms: number): Promise<Reply | null> {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms && useStudio.getState().status === "thinking") {
+    const r = (await fetch("/api/brandon/line").then((x) => x.json()).catch(() => ({ line: null }))) as { line: { text: string } | null };
+    if (r.line) return { ok: true, text: r.line.text, via: "live seat" };
+    await new Promise((res) => window.setTimeout(res, 500));
+  }
+  return null;
+}
+
+/** The operator pastes a line for Brandon. It answers the open address if there is one; else the paste is the address. */
+export async function postBrandonLine(text: string) {
+  const t = text.trim();
+  if (!t) return;
+  const r = (await fetch("/api/brandon/line", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ text: t }) })
+    .then((x) => x.json())
+    .catch(() => ({ ok: false }))) as { ok: boolean };
+  if (!r.ok) await speakText(t, SEAT_VOICE.talent);
 }
 
 export function stopSpeaking() {

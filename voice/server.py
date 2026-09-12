@@ -6,7 +6,7 @@ it lives in vendor/Christman-Sound (git submodule) or wherever $CHRISTMAN_SOUND 
 and nothing in it is modified.
 
 Run:  npm run voice        (python3 voice/server.py)
-Env:  CHRISTMAN_SOUND (SDK checkout), VOICE_PORT (default 5000), CHRISTMAN_OUTPUT_DIR.
+Env:  CHRISTMAN_SOUND (SDK checkout), VOICE_PORT (default 1930), CHRISTMAN_OUTPUT_DIR.
 
 Degrades loudly: /status lists exactly which modules and voices are missing, and
 /generate refuses with the same list instead of returning silence.
@@ -163,7 +163,7 @@ def main() -> None:
         sys.path.insert(0, str(SDK))
     else:
         print(f"[voice] Christman-Sound not found at {SDK}. Run: git submodule update --init", file=sys.stderr)
-    port = int(os.environ.get("VOICE_PORT", "5000"))
+    port = int(os.environ.get("VOICE_PORT", "1930"))
     print(f"[voice] status: {json.dumps(status())}")
     print(f"[voice] listening on http://127.0.0.1:{port}")
     ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()

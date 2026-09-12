@@ -5,8 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { decodePcm, ffmpegPath } from "./audio-node.ts";
-import { ask, brainStatus } from "./brain.ts";
+import { ask, brainStatus, pickBrain } from "./brain.ts";
 import { earStatus, hear } from "./ear.ts";
+import { maskKeys, readKeys, writeKey } from "./keys.ts";
+import { LIVE_SEAT_MS, closeCue, liveSeatPresent, openCue, postLine, readCue, takeLine } from "./line.ts";
 import { CUES, DISCLAIMER_CUES } from "./cuebook.ts";
 import { mouthFrames } from "./envelope.ts";
 import { InterlockError, createShow, type ShowEvent } from "./interlock.ts";
@@ -170,8 +172,63 @@ test("stage 3: Brandon's reply comes from local Ollama only, and every failure n
   });
   assert.equal((await brainStatus(up)).ready, true);
   const r3 = await ask("Patty, what did the log show?", [{ role: "user", content: "earlier" }], up);
-  assert.deepEqual(r3, { ok: true, text: "Two providers, one day, no disclosure. Patty?" });
+  assert.deepEqual(r3, { ok: true, text: "Two providers, one day, no disclosure. Patty?", via: "Ollama llama3.1 at http://127.0.0.1:11434" });
   assert.ok(urls.every((u) => u.startsWith("http://127.0.0.1:11434/")), `only the local endpoint: ${urls.join(" ")}`);
+
+  // With a key in the drop, NVIDIA's catalog answers instead; the key rides as a bearer and never anywhere else.
+  const nv = { kind: "nvidia" as const, key: "nvapi-test1234", model: "meta/llama-3.1-8b-instruct" };
+  const nvUrls: string[] = [];
+  const nvidia = ((url: string, init?: RequestInit) => {
+    nvUrls.push(url);
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer nvapi-test1234");
+    if (url.endsWith("/models")) return Promise.resolve(Response.json({ data: [{ id: "meta/llama-3.1-8b-instruct" }] }));
+    const req = JSON.parse(init!.body as string) as { model: string; messages: { role: string }[] };
+    assert.equal(req.model, nv.model);
+    assert.equal(req.messages[0].role, "system");
+    return Promise.resolve(Response.json({ choices: [{ message: { content: " Short take. Everett? " } }] }));
+  }) as unknown as typeof fetch;
+  const s = await brainStatus(nvidia, nv);
+  assert.ok(s.ready && /NVIDIA/.test(s.detail) && s.detail.endsWith("••••1234)"), "status names the brain and only the key's tail");
+  assert.deepEqual(await ask("go", [], nvidia, nv), { ok: true, text: "Short take. Everett?", via: "NVIDIA meta/llama-3.1-8b-instruct" });
+  assert.ok(nvUrls.every((u) => u.startsWith("https://integrate.api.nvidia.com/v1/")));
+  const rejected = (() => Promise.resolve(new Response("{}", { status: 401 }))) as unknown as typeof fetch;
+  assert.match((await brainStatus(rejected, nv)).detail, /rejected the key/);
+  assert.equal(pickBrain({}).kind, "ollama");
+  assert.equal(pickBrain({ NVIDIA_API_KEY: "x" }).kind, "nvidia");
+});
+
+test("stage 3, live seat: an address opens, the seat answers it once, and a line with no address is refused", () => {
+  let now = 1_000_000;
+  assert.equal(liveSeatPresent(now), false, "nobody has read a cue yet");
+  assert.ok(!postLine("unprompted").ok, "no address open");
+  const cue = openCue("Patty, what did the log show?", now);
+  assert.deepEqual(readCue(now), { cue, answered: false });
+  assert.ok(liveSeatPresent(now + LIVE_SEAT_MS - 1), "reading the cue puts the seat in the chair");
+  assert.equal(liveSeatPresent(now + LIVE_SEAT_MS + 1), false, "a seat that stops reading leaves the chair");
+  assert.ok(!postLine("   ").ok, "empty line");
+  assert.deepEqual(postLine("Two providers, one day."), { ok: true, cueId: cue.id });
+  assert.ok(!postLine("a second answer").ok, "one answer per address");
+  assert.deepEqual(takeLine(), { cueId: cue.id, text: "Two providers, one day." });
+  assert.equal(takeLine(), null, "taken once");
+  assert.ok(!postLine("late").ok, "the address closed with the answer");
+  now += 5;
+  const next = openCue("second address", now);
+  assert.ok(next.id > cue.id);
+  closeCue();
+  assert.equal(readCue(now).cue, null);
+});
+
+test("key drop: keys live in one owner-only file, and the floor only ever sees the tail", () => {
+  const path = join(mkdtempSync(join(tmpdir(), "keys-")), "show", "keys.env");
+  assert.deepEqual(readKeys(path), {});
+  assert.throws(() => writeKey("bad name", "x", path), /capitals/);
+  writeKey("NVIDIA_API_KEY", "nvapi-abcdef1234", path);
+  writeKey("NVIDIA_MODEL", "meta/llama-3.1-8b-instruct", path);
+  assert.deepEqual(readKeys(path), { NVIDIA_API_KEY: "nvapi-abcdef1234", NVIDIA_MODEL: "meta/llama-3.1-8b-instruct" });
+  assert.equal(statSync(path).mode & 0o777, 0o600, "owner-only");
+  assert.deepEqual(maskKeys(readKeys(path)), { NVIDIA_API_KEY: "••••1234", NVIDIA_MODEL: "••••ruct" });
+  writeKey("NVIDIA_API_KEY", "", path);
+  assert.deepEqual(readKeys(path), { NVIDIA_MODEL: "meta/llama-3.1-8b-instruct" });
 });
 
 test("stage 2: the operator's words come from THE FILAMENT's ear only; an empty ear stays empty", async () => {

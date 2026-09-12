@@ -7,3 +7,6 @@ node_modules/
 # Third Seat runtime outputs: renders and the append-only show log are not source
 show/renders/
 show/*.jsonl
+
+# API keys dropped in the Build bay live here, owner-only, never in the repo
+show/keys.env

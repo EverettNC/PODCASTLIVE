@@ -11,9 +11,12 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as OutRouteImport } from './routes/out'
+import { Route as ApiKeysRouteImport } from './routes/api/keys'
 import { Route as ApiMillRouteImport } from './routes/api/mill'
 import { Route as ApiSttRouteImport } from './routes/api/stt'
 import { Route as ApiTtsRouteImport } from './routes/api/tts'
+import { Route as ApiBrandonCueRouteImport } from './routes/api/brandon/cue'
+import { Route as ApiBrandonLineRouteImport } from './routes/api/brandon/line'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -23,6 +26,11 @@ const IndexRoute = IndexRouteImport.update({
 const OutRoute = OutRouteImport.update({
   id: '/out',
   path: '/out',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiKeysRoute = ApiKeysRouteImport.update({
+  id: '/api/keys',
+  path: '/api/keys',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiMillRoute = ApiMillRouteImport.update({
@@ -40,43 +48,90 @@ const ApiTtsRoute = ApiTtsRouteImport.update({
   path: '/api/tts',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBrandonCueRoute = ApiBrandonCueRouteImport.update({
+  id: '/api/brandon/cue',
+  path: '/api/brandon/cue',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBrandonLineRoute = ApiBrandonLineRouteImport.update({
+  id: '/api/brandon/line',
+  path: '/api/brandon/line',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/out': typeof OutRoute
+  '/api/keys': typeof ApiKeysRoute
   '/api/mill': typeof ApiMillRoute
   '/api/stt': typeof ApiSttRoute
   '/api/tts': typeof ApiTtsRoute
+  '/api/brandon/cue': typeof ApiBrandonCueRoute
+  '/api/brandon/line': typeof ApiBrandonLineRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/out': typeof OutRoute
+  '/api/keys': typeof ApiKeysRoute
   '/api/mill': typeof ApiMillRoute
   '/api/stt': typeof ApiSttRoute
   '/api/tts': typeof ApiTtsRoute
+  '/api/brandon/cue': typeof ApiBrandonCueRoute
+  '/api/brandon/line': typeof ApiBrandonLineRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/out': typeof OutRoute
+  '/api/keys': typeof ApiKeysRoute
   '/api/mill': typeof ApiMillRoute
   '/api/stt': typeof ApiSttRoute
   '/api/tts': typeof ApiTtsRoute
+  '/api/brandon/cue': typeof ApiBrandonCueRoute
+  '/api/brandon/line': typeof ApiBrandonLineRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/out' | '/api/mill' | '/api/stt' | '/api/tts'
+  fullPaths:
+    | '/'
+    | '/out'
+    | '/api/keys'
+    | '/api/mill'
+    | '/api/stt'
+    | '/api/tts'
+    | '/api/brandon/cue'
+    | '/api/brandon/line'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/out' | '/api/mill' | '/api/stt' | '/api/tts'
-  id: '__root__' | '/' | '/out' | '/api/mill' | '/api/stt' | '/api/tts'
+  to:
+    | '/'
+    | '/out'
+    | '/api/keys'
+    | '/api/mill'
+    | '/api/stt'
+    | '/api/tts'
+    | '/api/brandon/cue'
+    | '/api/brandon/line'
+  id:
+    | '__root__'
+    | '/'
+    | '/out'
+    | '/api/keys'
+    | '/api/mill'
+    | '/api/stt'
+    | '/api/tts'
+    | '/api/brandon/cue'
+    | '/api/brandon/line'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   OutRoute: typeof OutRoute
+  ApiKeysRoute: typeof ApiKeysRoute
   ApiMillRoute: typeof ApiMillRoute
   ApiSttRoute: typeof ApiSttRoute
   ApiTtsRoute: typeof ApiTtsRoute
+  ApiBrandonCueRoute: typeof ApiBrandonCueRoute
+  ApiBrandonLineRoute: typeof ApiBrandonLineRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -93,6 +148,13 @@ declare module '@tanstack/react-router' {
       path: '/out'
       fullPath: '/out'
       preLoaderRoute: typeof OutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/keys': {
+      id: '/api/keys'
+      path: '/api/keys'
+      fullPath: '/api/keys'
+      preLoaderRoute: typeof ApiKeysRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/mill': {
@@ -116,15 +178,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTtsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/brandon/cue': {
+      id: '/api/brandon/cue'
+      path: '/api/brandon/cue'
+      fullPath: '/api/brandon/cue'
+      preLoaderRoute: typeof ApiBrandonCueRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/brandon/line': {
+      id: '/api/brandon/line'
+      path: '/api/brandon/line'
+      fullPath: '/api/brandon/line'
+      preLoaderRoute: typeof ApiBrandonLineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   OutRoute: OutRoute,
+  ApiKeysRoute: ApiKeysRoute,
   ApiMillRoute: ApiMillRoute,
   ApiSttRoute: ApiSttRoute,
   ApiTtsRoute: ApiTtsRoute,
+  ApiBrandonCueRoute: ApiBrandonCueRoute,
+  ApiBrandonLineRoute: ApiBrandonLineRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
