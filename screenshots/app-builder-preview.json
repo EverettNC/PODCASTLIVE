@@ -1,0 +1,38 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "From Now Till Always",
+      "hasCanvas": false,
+      "bodyTextLen": 1525,
+      "bodyTextHash": "315fd0e3225da8b68f9b230c160344744a0dc93e2834f95900c22d49e1b8d444",
+      "bodyTextPrefix": "From Now Till Always EPISODE ONE Floor Build Cover Learn 00:00:0",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "From Now Till Always",
+      "hasCanvas": false,
+      "bodyTextLen": 1232,
+      "bodyTextHash": "c4f62f0429abc1131aa8b95cd3de0436c79f7fcfb6800f77af6536a2e49ff204",
+      "bodyTextPrefix": "From Now Till Always Floor Build Cover Learn STANDBY FLOOR Contr",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [
+    "BRAND WARNING: /workspace/public/og.jpg is over 600 KB — link scrapers (X card previews included) time out or skip images this heavy, so the card silently fails to unfurl. Re-encode as JPEG (public/og.jpg, ffmpeg -q:v 4) per /workspace/.grok/skills/og/SKILL.md."
+  ],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}

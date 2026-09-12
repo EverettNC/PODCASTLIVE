@@ -1,0 +1,48 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { BuildBay } from "@/components/studio/BuildBay";
+import { CoverBay } from "@/components/studio/CoverStage";
+import { DashboardBay } from "@/components/studio/DashboardBay";
+import { LearnBay } from "@/components/studio/LearnBay";
+import { StudioBoundary } from "@/components/studio/StudioBoundary";
+import { TopBar } from "@/components/studio/TopBar";
+import { hydrateStudio, useStudio } from "@/lib/studio-store";
+import { getAiStatus } from "@/lib/xai/talk";
+
+export const Route = createFileRoute("/")({ component: Home });
+
+function Home() {
+  const setAiReady = useStudio((s) => s.setAiReady);
+  const bay = useStudio((s) => s.bay);
+
+  useEffect(() => {
+    hydrateStudio();
+    void getAiStatus()
+      .then((s) => setAiReady(s.ready))
+      .catch(() => setAiReady(false));
+    const onErr = () => useStudio.getState().setError("A take failed. The floor is still up.");
+    window.addEventListener("error", onErr);
+    window.addEventListener("unhandledrejection", onErr);
+    return () => {
+      window.removeEventListener("error", onErr);
+      window.removeEventListener("unhandledrejection", onErr);
+    };
+  }, [setAiReady]);
+
+  return (
+    <div className="flex h-dvh flex-col overflow-hidden bg-bg">
+      <TopBar />
+      <StudioBoundary>
+        {bay === "cover" ? (
+          <CoverBay />
+        ) : bay === "learn" ? (
+          <LearnBay />
+        ) : bay === "build" ? (
+          <BuildBay />
+        ) : (
+          <DashboardBay />
+        )}
+      </StudioBoundary>
+    </div>
+  );
+}
